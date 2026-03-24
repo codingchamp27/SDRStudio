@@ -20,7 +20,7 @@ export const SdrService = {
   
   // Get all active device sets (Rx/Tx)
   getDeviceSets: async () => {
-    const response = await sdrApi.get('/deviceset');
+    const response = await sdrApi.get('/devicesets');
     return response.data;
   },
   
