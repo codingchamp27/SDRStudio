@@ -1,0 +1,12 @@
+# This is a generated file and its contents are an internal implementation detail.
+# The download step will be re-executed if anything in this file changes.
+# No other meaning or use of this file is supported.
+
+method=url
+command=/opt/homebrew/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/Users/harshkumar/Desktop/sdrangel/build/external/libusb/src/libusb-stamp/download-libusb.cmake;COMMAND;/opt/homebrew/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/Users/harshkumar/Desktop/sdrangel/build/external/libusb/src/libusb-stamp/verify-libusb.cmake;COMMAND;/opt/homebrew/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/Users/harshkumar/Desktop/sdrangel/build/external/libusb/src/libusb-stamp/extract-libusb.cmake
+source_dir=/Users/harshkumar/Desktop/sdrangel/build/external/libusb/src/libusb
+work_dir=/Users/harshkumar/Desktop/sdrangel/build/external/libusb/src
+url(s)=https://github.com/libusb/libusb/releases/download/v1.0.29/libusb-1.0.29.tar.bz2
+hash=
+      no_extract=
+

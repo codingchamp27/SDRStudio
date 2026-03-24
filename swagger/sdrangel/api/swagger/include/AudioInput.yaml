@@ -1,0 +1,53 @@
+AudioInputSettings:
+  description: AudioInput
+  properties:
+    title:
+      type: string
+    device:
+      description: The name of the audio device
+      type: string
+    devSampleRate:
+      description: Audio sample rate
+      type: integer
+    volume:
+      type: number
+      format: float
+    log2Decim:
+      description: Decimation factor
+      type: integer
+    iqMapping:
+      type: integer
+      description: >
+        Audio channel to IQ mapping
+          * 0 - I=L, Q=0
+          * 1 - I=R, Q=0
+          * 2 - I=L, Q=R
+          * 3 - I=R, Q=L
+    dcBlock:
+      type: integer
+      description: >
+        Auto DC blocking
+          * 0 - Off
+          * 1 - On
+    iqImbalance:
+      type: integer
+      description: >
+        Auto IQ balance (you need auto DC blocking active)
+          * 0 - Off
+          * 1 - On
+    fcPos:
+      type: integer
+      description: >
+        Decimated bandpass center frequency position
+          * 0 - Infradyne
+          * 1 - Supradyne
+          * 2 - Centered
+    useReverseAPI:
+      description: Synchronize with reverse API (1 for yes, 0 for no)
+      type: integer
+    reverseAPIAddress:
+      type: string
+    reverseAPIPort:
+      type: integer
+    reverseAPIDeviceIndex:
+      type: integer

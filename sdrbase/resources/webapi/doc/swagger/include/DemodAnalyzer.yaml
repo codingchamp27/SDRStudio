@@ -1,0 +1,54 @@
+DemodAnalyzerSettings:
+  description: DemodAnalyzer
+  properties:
+    log2Decim:
+      type: integer
+    title:
+      type: string
+    rgbColor:
+      type: integer
+    fileRecordName:
+      type: string
+      description: Output wave file name
+    recordToFile:
+      type: integer
+      description: >
+        Recording status
+          * 1 - recording
+          * 0 - not recording
+    recordSilenceTime:
+      type: integer
+      description: Record silence time before stopping recording in 10ths of seconds
+    useReverseAPI:
+      type: integer
+      description: >
+        Synchronize with reverse API
+          * 1 - yes
+          * 0 - no
+    reverseAPIAddress:
+      type: string
+    reverseAPIPort:
+      type: integer
+    reverseAPIFeatureSetIndex:
+      type: integer
+    reverseAPIFeatureIndex:
+      type: integer
+    spectrumConfig:
+      $ref: "/doc/swagger/include/GLSpectrum.yaml#/GLSpectrum"
+    scopeConfig:
+      $ref: "/doc/swagger/include/GLScope.yaml#/GLScope"
+    rollupState:
+      $ref: "/doc/swagger/include/RollupState.yaml#/RollupState"
+
+DemodAnalyzerActions:
+  description: "Demod Analyzer actions"
+  required:
+  - deviceId
+  - channelId
+  properties:
+    deviceId:
+      type: integer
+      description: "Device Id/Number that channel belongs to"
+    channelId:
+      type: integer
+      description: "Channel Id/Number of the channel within the device"

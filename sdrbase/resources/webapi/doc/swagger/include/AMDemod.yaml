@@ -1,0 +1,82 @@
+AMDemodSettings:
+  description: AMDemod
+  properties:
+    inputFrequencyOffset:
+      description: channel center frequency shift from baseband center in Hz
+      type: integer
+      format: int64
+    rfBandwidth:
+      description: channel RF bandwidth in Hz (floors to next 100 Hz)
+      type: number
+      format: float
+    afBandwidth:
+      description: AF bandwidth in Hz
+      type: number
+      format: float
+    squelch:
+      description: power squelch threshold in decibels
+      type: number
+      format: float
+    volume:
+      type: number
+      format: float
+    audioMute:
+      type: integer
+    bandpassEnable:
+      description: use bandpass filter (1 for yes, 0 for no)
+      type: integer
+    rgbColor:
+      type: integer
+    title:
+      type: string
+    audioDeviceName:
+      type: string
+    pll:
+      description: PLL active (for synchronous AM)
+      type: integer
+    syncAMOperation:
+      description: Synchronous AM sidebands mode (DSB, USB, LSB)
+      type: integer
+    frequencyMode:
+      description: (0 for Offset, 1 for MW, 2 for 25k, 3 for 8.33k)
+      type: integer
+    frequency:
+      description: Channel center frequency
+      type: integer
+      format: int64
+    snap:
+      description: Snap channel marker to channel center frequencies
+      type: integer
+    streamIndex:
+      description: MIMO channel. Not relevant when connected to SI (single Rx).
+      type: integer
+    useReverseAPI:
+      description: Synchronize with reverse API (1 for yes, 0 for no)
+      type: integer
+    reverseAPIAddress:
+      type: string
+    reverseAPIPort:
+      type: integer
+    reverseAPIDeviceIndex:
+      type: integer
+    reverseAPIChannelIndex:
+      type: integer
+    channelMarker:
+      $ref: "/doc/swagger/include/ChannelMarker.yaml#/ChannelMarker"
+    rollupState:
+      $ref: "/doc/swagger/include/RollupState.yaml#/RollupState"
+
+AMDemodReport:
+  description: AMDemod
+  properties:
+    channelPowerDB:
+      description: power received in channel (dB)
+      type: number
+      format: float
+    squelch:
+      description: squelch status (1 if open else 0)
+      type: integer
+    audioSampleRate:
+      type: integer
+    channelSampleRate:
+      type: integer

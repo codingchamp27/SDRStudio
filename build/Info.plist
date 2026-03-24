@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>English</string>
+	<key>CFBundleExecutable</key>
+	<string>sdrangel</string>
+	<key>CFBundleGetInfoString</key>
+	<string>SDR Rx/Tx software for Airspy, Airspy HF+, BladeRF, HackRF, LimeSDR, PlutoSDR, RTL-SDR, SDRplay, USRP and FunCube</string>
+	<key>CFBundleIconFile</key>
+	<string>SDRangel.icns</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.f4exb.SDRangel</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleLongVersionString</key>
+	<string>7.23.2-68-g6baa38f88</string>
+	<key>CFBundleName</key>
+	<string>sdrangel</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>7.23.2-68-g6baa38f88</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright (c) 2019 Edouard Griffiths. All rights reserved.</string>
+	<key>ForAppStore</key>
+	<string>yes</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.education</string>
+        <key>NSPrincipalClass</key>
+        <string>NSApplication</string>
+        <key>NSHighResolutionCapable</key>
+        <string>True</string>
+        <key>NSSupportsAutomaticGraphicsSwitching</key>
+        <true/>
+        <key>NSLocationUsageDescription</key>
+        <string>Uses location to show position on maps</string>
+        <key>NSMicrophoneUsageDescription</key>
+        <string>Uses microphone to transmit voice</string>
+        <key>NSCameraUsageDescription</key>
+        <string>Uses camera to transmit video</string>
+</dict>
+</plist>

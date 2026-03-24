@@ -1,0 +1,21 @@
+#!/usr/bin/make -f
+%:
+	dh $@ --parallel --buildsystem=cmake+ninja
+
+override_dh_auto_configure:
+	dh_auto_configure -- -DARCH_OPT=nehalem -DENABLE_EXTERNAL_LIBRARIES=AUTO -DDEBUG_OUTPUT=ON -DBUILD_SERVER=OFF
+
+# delete any external projects (such as libsigmf) that are installed
+# would be better if we could prevent them from being installed in CMakeLists.txt
+override_dh_install:
+	-find debian/sdrangel -type d -name external -exec rm -r {} \; -exec mkdir {} \; -exec rmdir -p {} \;
+	dh_install
+
+override_dh_auto_test:
+	echo "Skipping test step"
+
+# permit the packaging with /usr/local/lib libraries (from `make install`)
+# you can also use `export DEB_DH_SHLIBDEPS_ARGS_ALL=--dpkg-shlibdeps-params=--ignore-missing-info`
+# not a good idea!
+override_dh_shlibdeps:
+	dh_shlibdeps --dpkg-shlibdeps-params=--ignore-missing-info
