@@ -1,6 +1,0 @@
-requests
-Flask
-numpy
-websockets
-websocket-client
-mock

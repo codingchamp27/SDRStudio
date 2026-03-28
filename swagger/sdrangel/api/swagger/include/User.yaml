@@ -1,9 +1,0 @@
-User:
-  required:
-    - index
-    - name
-  properties:
-    index:
-      type: integer
-    name:
-      type: string
