@@ -44,11 +44,8 @@ export const SdrService = {
     return response.data.devices as any[];
   },
 
-  attachDeviceHardware: async (deviceSetIndex: number, hwType: string, direction: number) => {
-    const response = await sdrApi.put(`/deviceset/${deviceSetIndex}/device`, {
-      hwType,
-      direction
-    });
+  attachDeviceHardware: async (deviceSetIndex: number, hwDevice: any) => {
+    const response = await sdrApi.put(`/deviceset/${deviceSetIndex}/device`, hwDevice);
     return response.data;
   },
 
@@ -174,17 +171,19 @@ export const SdrService = {
   },
 
   // ---- SPECTRUM SERVER (WebSocket) ----
-  getSpectrumServer: async (deviceSetIndex: number) => {
-    const response = await sdrApi.get(`/deviceset/${deviceSetIndex}/spectrum/server`);
-    return response.data as { run: boolean; address: string; port: number };
-  },
-
   setSpectrumServer: async (deviceSetIndex: number, run: boolean, port = 8887) => {
     const response = await sdrApi.post(`/deviceset/${deviceSetIndex}/spectrum/server`, {
-      run,
+      run: run ? 1 : 0,
+      serverAddress: '127.0.0.1',
+      serverPort: port,
       address: '127.0.0.1',
-      port,
-    });
+      port: port,
+      spectrumServerSettings: {
+        run: run ? 1 : 0,
+        serverAddress: '127.0.0.1',
+        serverPort: port
+      }
+    }).catch(() => ({ data: null }));
     return response.data;
   },
 

@@ -61,6 +61,10 @@ interface DeviceSet {
     direction: number;
     centerFrequency: number;
     state: number | string;
+    displayedName?: string;
+    serial?: string;
+    sequence?: number;
+    deviceStreamIndex?: number;
   };
 }
 
@@ -75,6 +79,7 @@ function TopNavbar({ isConnected, onOpenPresets, onToggleFeatures, featuresOpen,
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [deviceSelection, setDeviceSelection] = useState<{ direction: 0 | 1 } | null>(null);
+  const [uploadStatus, setUploadStatus] = useState<{name: string, status: 'uploading' | 'done'} | null>(null);
 
   const activeAudio = audioOutDevices.find(d => d.isSystemDefault === 1) || audioOutDevices[0];
 
@@ -98,6 +103,7 @@ function TopNavbar({ isConnected, onOpenPresets, onToggleFeatures, featuresOpen,
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setUploadStatus({ name: file.name, status: 'uploading' });
     toast(`Uploading ${file.name}...`, 'info');
     
     try {
@@ -116,16 +122,17 @@ function TopNavbar({ isConnected, onOpenPresets, onToggleFeatures, featuresOpen,
       // Copy to clipboard
       await navigator.clipboard.writeText(data.path);
       toast(`Successfully uploaded! Absolute path copied to clipboard: ${data.path}`, 'success');
-      
+      setUploadStatus({ name: file.name, status: 'done' });
     } catch {
       toast('Failed to upload file to backend server.', 'error');
+      setUploadStatus(null);
     }
     
     // Clear input
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleConfirmSamplingDevice = async (hwType: string) => {
+  const handleConfirmSamplingDevice = async (hwDevice: any) => {
     if (!deviceSelection) return;
     const direction = deviceSelection.direction;
     const dirStr = direction === 0 ? "Rx" : "Tx";
@@ -142,8 +149,9 @@ function TopNavbar({ isConnected, onOpenPresets, onToggleFeatures, featuresOpen,
          // The newly created device set is the absolute last one appended
          const newSetIndex = sets.length - 1; 
          
-         await SdrService.attachDeviceHardware(newSetIndex, hwType, direction);
-         toast(`Attached sampling device: ${hwType}`, "success");
+         // Make sure to push the selected hardware direction alongside its identifier details
+         await SdrService.attachDeviceHardware(newSetIndex, { ...hwDevice, direction });
+         toast(`Attached sampling device: ${hwDevice.displayedName || hwDevice.hwType}`, "success");
       }
     } catch (e) {
       toast(`Failed to setup ${dirStr} workspace`, "error");
@@ -204,6 +212,12 @@ function TopNavbar({ isConnected, onOpenPresets, onToggleFeatures, featuresOpen,
         >
           📤 Upload Media
         </button>
+        {uploadStatus && (
+          <span style={{ fontSize: '11px', color: uploadStatus.status === 'uploading' ? '#ffeb3b' : '#2ed573' }}>
+            {uploadStatus.status === 'uploading' ? 'Uploading: ' : 'Uploaded: '}
+            {uploadStatus.name.length > 20 ? uploadStatus.name.substring(0, 20) + '...' : uploadStatus.name}
+          </span>
+        )}
       </div>
 
       <div style={{ flex: 1 }}></div>
@@ -227,9 +241,9 @@ function TopNavbar({ isConnected, onOpenPresets, onToggleFeatures, featuresOpen,
   );
 }
 
-function DeviceSelectionModal({ direction, onClose, onConfirm }: { direction: 0 | 1, onClose: () => void, onConfirm: (hw: string) => void }) {
+function DeviceSelectionModal({ direction, onClose, onConfirm }: { direction: 0 | 1, onClose: () => void, onConfirm: (dev: any) => void }) {
   const [devices, setDevices] = useState<any[]>([]);
-  const [selectedHw, setSelectedHw] = useState<string>('');
+  const [selectedHwIdx, setSelectedHwIdx] = useState<number>(-1);
   const [loading, setLoading] = useState(false);
 
   const fetchDevices = async () => {
@@ -238,7 +252,7 @@ function DeviceSelectionModal({ direction, onClose, onConfirm }: { direction: 0 
       const devs = await SdrService.getAvailableDevices(direction);
       const unbound = devs.filter(d => d.deviceSetIndex === -1);
       setDevices(unbound);
-      if (unbound.length > 0) setSelectedHw(unbound[0].hwType);
+      if (unbound.length > 0) setSelectedHwIdx(unbound[0].index);
     } catch {}
     setLoading(false);
   };
@@ -258,13 +272,13 @@ function DeviceSelectionModal({ direction, onClose, onConfirm }: { direction: 0 
              <select 
                className="sdr-select"
                style={{ flex: 1, background: '#252528', color: '#fff', border: '1px solid #444', padding: '6px' }}
-               value={selectedHw}
-               onChange={e => setSelectedHw(e.target.value)}
+               value={String(selectedHwIdx)}
+               onChange={e => setSelectedHwIdx(Number(e.target.value))}
              >
                {devices.map(d => (
-                 <option key={d.hwType + d.index} value={d.hwType}>{d.displayedName}</option>
+                 <option key={d.hwType + d.index} value={String(d.index)}>{d.displayedName}</option>
                ))}
-               {devices.length === 0 && <option disabled value="">No unbound devices</option>}
+               {devices.length === 0 && <option disabled value="-1">No unbound devices</option>}
              </select>
              <button className="sdr-btn" onClick={fetchDevices} title="Refresh" style={{ padding: '6px 10px', fontSize: '14px' }}>
                {loading ? '⌛' : '↻'}
@@ -275,9 +289,12 @@ function DeviceSelectionModal({ direction, onClose, onConfirm }: { direction: 0 
               <button className="sdr-btn cancel" onClick={onClose} style={{ padding: '6px 16px', background: 'transparent', border: '1px solid #e67e22', color: '#e67e22', borderRadius: '4px' }}>Cancel</button>
               <button 
                 className="sdr-btn" 
-                disabled={!selectedHw}
-                onClick={() => onConfirm(selectedHw)}
-                style={{ padding: '6px 16px', background: '#333', border: '1px solid #555', color: '#fff', borderRadius: '4px', opacity: selectedHw ? 1 : 0.5 }}
+                disabled={selectedHwIdx === -1}
+                onClick={() => {
+                  const d = devices.find(x => x.index === selectedHwIdx);
+                  if (d) onConfirm(d);
+                }}
+                style={{ padding: '6px 16px', background: '#333', border: '1px solid #555', color: '#fff', borderRadius: '4px', opacity: selectedHwIdx !== -1 ? 1 : 0.5 }}
               >OK</button>
            </div>
         </div>
@@ -829,7 +846,7 @@ function ChannelWorkspaceCard({ dsIdx, cIdx, channel }: { dsIdx: number, cIdx: n
 }
 
 
-function DeviceSidebarCard({ idx, ds, onAddChannel }: { idx: number, ds: DeviceSet, onAddChannel: () => void }) {
+function DeviceSidebarCard({ idx, ds, deviceSetCount, onAddChannel }: { idx: number, ds: DeviceSet, deviceSetCount: number, onAddChannel: () => void }) {
   const [isTuning, setIsTuning] = useState(false);
   const [freqInput, setFreqInput] = useState("");
   const [hwSettings, setHwSettings] = useState<any>(null);
@@ -869,7 +886,7 @@ function DeviceSidebarCard({ idx, ds, onAddChannel }: { idx: number, ds: DeviceS
     return () => clearInterval(inv);
   }, [idx]);
 
-  const patchSetting = async (field: string, value: number) => {
+  const patchSetting = async (field: string, value: number | string) => {
     try {
       const fullSettings = await SdrService.getDeviceSettings(idx);
       const hwKey = Object.keys(fullSettings).find(k => k.endsWith('Settings'));
@@ -884,8 +901,12 @@ function DeviceSidebarCard({ idx, ds, onAddChannel }: { idx: number, ds: DeviceS
   };
 
   const handleDelete = async () => {
+    if (idx !== deviceSetCount - 1) {
+      toast("SDRangel natively requires closing the right-most (latest) workspace first.", "warning");
+      return;
+    }
     try {
-      await SdrService.deleteDeviceSet(idx);
+      await SdrService.deleteDeviceSet();
       toast(`Workspace ${idx} closed`, "info");
     } catch (e) {
       toast("Failed to close Device Workspace", "error");
@@ -927,7 +948,9 @@ function DeviceSidebarCard({ idx, ds, onAddChannel }: { idx: number, ds: DeviceS
           <span className={hw?.direction ? 'tx-badge' : 'rx-badge'}>
             {hw?.direction ? 'T' : 'R'}:{idx}
           </span>
-          <span className="hw-label">{hw?.hwType || 'No Hardware'}</span>
+          <span className="hw-label" title={hw?.serial}>
+            {hw?.displayedName || (hw?.serial ? `${hw.hwType}[${hw.sequence || 0}:${hw.deviceStreamIndex || 0}]` : hw?.hwType) || 'No Hardware'}
+          </span>
         </div>
         <div className="navbar-group">
           <button className="sdr-btn" title="Open SDRangel docs in browser" onClick={() => window.open('https://github.com/f4exb/sdrangel/wiki', '_blank')}>❔</button>
@@ -972,6 +995,22 @@ function DeviceSidebarCard({ idx, ds, onAddChannel }: { idx: number, ds: DeviceS
                 onChange={(e) => setHwSettings({ ...hwSettings, devSampleRate: parseInt(e.target.value) })}
                 onBlur={(e) => patchSetting('devSampleRate', parseInt(e.target.value))}
               />
+            </div>
+          )}
+          {hwSettings.antennaPath !== undefined && (
+            <div className="setting-group">
+              <label>Antenna Port</label>
+              <select
+                value={hwSettings.antennaPath}
+                onChange={(e) => {
+                  setHwSettings({ ...hwSettings, antennaPath: e.target.value });
+                  patchSetting('antennaPath', e.target.value);
+                }}
+                style={{ background: '#222', color: '#fff', border: '1px solid #555', fontSize: '11px', padding: '2px 4px', width: '100%', borderRadius: '3px' }}
+              >
+                <option value="TX/RX">TX/RX</option>
+                <option value="RX2">RX2</option>
+              </select>
             </div>
           )}
           {hwSettings.log2Decim !== undefined && (
@@ -1288,6 +1327,7 @@ function MainWorkspace({ deviceSets, isConnected }: { deviceSets: DeviceSet[], i
     hasDevice,
     isRunning: isRxRunning,
     isApiConnected: isConnected,
+    wsPort: 8887,
   });
 
   const handleAutoScale = () => {
@@ -1507,6 +1547,7 @@ function SdrApplication() {
               key={idx}
               idx={idx}
               ds={ds}
+              deviceSetCount={deviceSets.length}
               onAddChannel={() => setRegistryTarget(idx)}
             />
           ))}

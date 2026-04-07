@@ -73,7 +73,7 @@ function parseFrame(data: ArrayBuffer): Float32Array | null {
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 export function useSpectrumData({
   binsRef, onDataSource,
-  deviceSetIndex, hasDevice, isRunning, isApiConnected,
+  deviceSetIndex, hasDevice, isApiConnected,
   wsPort = 8887,
 }: UseSpectrumDataOptions) {
   const wsRef   = useRef<WebSocket | null>(null);
@@ -118,48 +118,78 @@ export function useSpectrumData({
 
     // A device exists — try WS live spectrum, fall back to DEMO mock
     const init = async () => {
-      // Try to enable WS server (best-effort, endpoint may not exist on all builds)
+      // SDRangel natively hardcodes port 8887 per process singleton despite the API keys. 
+      // Force shutdown any active zombie spectrum stream on the opposing workspace first to free the socket.
+      try { 
+         await SdrService.setSpectrumServer(deviceSetIndex === 0 ? 1 : 0, false, wsPort); 
+         await new Promise(r => setTimeout(r, 200));
+      } catch {}
+
+      // Try to enable WS server (best-effort)
       try { await SdrService.setSpectrumServer(deviceSetIndex, true, wsPort); } catch {}
       if (cancelled) return;
 
-      let ws: WebSocket;
-      try { ws = new WebSocket(`ws://127.0.0.1:${wsPort}`); }
-      catch { startMock(true, 'DEMO'); return; }
+      let retries = 6;
 
-      wsRef.current = ws;
-      ws.binaryType = 'arraybuffer';
+      const connectWS = () => {
+        if (cancelled) return;
+        let ws: WebSocket;
+        try { ws = new WebSocket(`ws://127.0.0.1:${wsPort}`); }
+        catch { startMock(true, 'DEMO'); return; }
 
-      const timeout = setTimeout(() => {
-        if (ws.readyState !== WebSocket.OPEN) {
-          ws.onclose = null; ws.close();
-          if (!cancelled) startMock(true, 'DEMO');
-        }
-      }, 3000);
+        wsRef.current = ws;
+        ws.binaryType = 'arraybuffer';
 
-      ws.onopen = () => {
-        clearTimeout(timeout);
-        if (!cancelled) {
-          stopAll();
-          wsRef.current = ws;
-          onDSRef.current('LIVE');
-        }
+        const timeout = setTimeout(() => {
+          if (ws.readyState !== WebSocket.OPEN) {
+            ws.onclose = null; ws.close();
+            if (retries > 0) { retries--; connectWS(); }
+            else if (!cancelled) startMock(true, 'DEMO');
+          }
+        }, 800);
+
+        ws.onopen = () => {
+          clearTimeout(timeout);
+          if (!cancelled) {
+            stopAll();
+            wsRef.current = ws;
+            onDSRef.current('LIVE');
+          }
+        };
+
+        ws.onmessage = (evt) => {
+          if (cancelled || !(evt.data instanceof ArrayBuffer)) return;
+          const bins = parseFrame(evt.data);
+          if (bins) binsRef.current = bins;
+        };
+
+        ws.onerror  = () => clearTimeout(timeout);
+        ws.onclose  = () => { 
+          clearTimeout(timeout); 
+          if (retries > 0 && !cancelled) {
+            retries--;
+            setTimeout(connectWS, 400);
+          } else if (!cancelled) {
+            startMock(true, 'DEMO'); 
+          }
+        };
       };
 
-      ws.onmessage = (evt) => {
-        if (cancelled || !(evt.data instanceof ArrayBuffer)) return;
-        const bins = parseFrame(evt.data);
-        if (bins) binsRef.current = bins;
-      };
-
-      ws.onerror  = () => clearTimeout(timeout);
-      ws.onclose  = () => { clearTimeout(timeout); if (!cancelled) startMock(true, 'DEMO'); };
+      connectWS();
     };
 
     // Start with DEMO immediately, then attempt WS upgrade
     startMock(true, 'DEMO');
     init();
 
-    return () => { cancelled = true; stopAll(); };
+    return () => { 
+      cancelled = true; 
+      stopAll(); 
+      if (hasDevice && isApiConnected) {
+        // Gracefully shutdown the server on the backend to avoid SDRangel segfaults
+        SdrService.setSpectrumServer(deviceSetIndex, false, wsPort).catch(() => {});
+      }
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deviceSetIndex, hasDevice, isRunning, isApiConnected, wsPort]);
+  }, [deviceSetIndex, hasDevice, isApiConnected, wsPort]);
 }
