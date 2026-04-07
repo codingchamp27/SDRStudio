@@ -60,77 +60,233 @@ interface DeviceSet {
     hwType: string;
     direction: number;
     centerFrequency: number;
-    state: number;
+    state: number | string;
   };
 }
 
-function TopNavbar({ isConnected, onOpenPresets, onToggleFeatures, featuresOpen, onOpenPreferences }: { 
+function TopNavbar({ isConnected, onOpenPresets, onToggleFeatures, featuresOpen, onOpenPreferences, audioOutDevices }: {
   isConnected: boolean;
   onOpenPresets: () => void;
   onToggleFeatures: () => void;
   featuresOpen: boolean;
   onOpenPreferences: () => void;
+  audioOutDevices: any[];
 }) {
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [deviceSelection, setDeviceSelection] = useState<{ direction: 0 | 1 } | null>(null);
 
-  const handleCreateRx = async () => {
-    try { await SdrService.createDeviceSet(0); toast("Rx Workspace created", "info"); } 
-    catch(e) { toast("Failed to create Rx device", "error"); }
+  const activeAudio = audioOutDevices.find(d => d.isSystemDefault === 1) || audioOutDevices[0];
+
+  const handleAudioChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const idx = parseInt(e.target.value);
+    const targetDevice = audioOutDevices.find(d => d.index === idx);
+    if (!targetDevice) return;
+    try {
+      await SdrService.patchAudioOutput({ ...targetDevice, isSystemDefault: 1 });
+      toast(`Audio routed to ${targetDevice.name}`, 'success');
+    } catch {
+      toast('Failed to change audio output device', 'error');
+    }
   };
-  const handleCreateTx = async () => {
-    try { await SdrService.createDeviceSet(1); toast("Tx Workspace created", "info"); } 
-    catch(e) { toast("Failed to create Tx device", "error"); }
+
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
   };
-  
-  const handleStub = (name: string) => toast(`'${name}' is not implemented yet.`, "warning");
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    toast(`Uploading ${file.name}...`, 'info');
+    
+    try {
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        headers: {
+          'x-file-name': file.name,
+          'Content-Type': 'application/octet-stream'
+        },
+        body: file
+      });
+      
+      if (!response.ok) throw new Error('Upload failed');
+      const data = await response.json();
+      
+      // Copy to clipboard
+      await navigator.clipboard.writeText(data.path);
+      toast(`Successfully uploaded! Absolute path copied to clipboard: ${data.path}`, 'success');
+      
+    } catch {
+      toast('Failed to upload file to backend server.', 'error');
+    }
+    
+    // Clear input
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleConfirmSamplingDevice = async (hwType: string) => {
+    if (!deviceSelection) return;
+    const direction = deviceSelection.direction;
+    const dirStr = direction === 0 ? "Rx" : "Tx";
+    setDeviceSelection(null);
+
+    try {
+      await SdrService.createDeviceSet(direction);
+      toast(`${dirStr} Workspace created`, "info");
+
+      // Fetch fresh state to find the newly created workspace index
+      const allSetsData = await SdrService.getDeviceSets().catch(() => null);
+      if (allSetsData && allSetsData.deviceSets && allSetsData.deviceSets.length > 0) {
+         const sets = allSetsData.deviceSets;
+         // The newly created device set is the absolute last one appended
+         const newSetIndex = sets.length - 1; 
+         
+         await SdrService.attachDeviceHardware(newSetIndex, hwType, direction);
+         toast(`Attached sampling device: ${hwType}`, "success");
+      }
+    } catch (e) {
+      toast(`Failed to setup ${dirStr} workspace`, "error");
+    }
+  };
+
+  const handleCreateRx = () => setDeviceSelection({ direction: 0 });
+  const handleCreateTx = () => setDeviceSelection({ direction: 1 });
+
 
   return (
     <div className="top-navbar">
+      {/* Presets */}
       <div className="navbar-group">
-        <button className="sdr-btn" title="Workspaces Index" onClick={() => handleStub('Workspace Index')}>W0</button>
-        <button className="sdr-btn" title="Preset Manager" onClick={onOpenPresets}>⭐</button>
+        <button className="sdr-btn" title="Preset Manager" onClick={onOpenPresets}>⭐ Presets</button>
       </div>
       <div className="nav-divider"></div>
-      
+
+      {/* Device creation */}
       <div className="navbar-group">
-        <button className="sdr-btn danger" title="Create new receiver" onClick={handleCreateRx}>✚ Rx</button>
-        <button className="sdr-btn success" title="Create new transmitter" onClick={handleCreateTx}>✚ Tx</button>
-        <button className="sdr-btn" title="Create new MIMO device" style={{color:'#f39c12'}} onClick={() => handleStub('Add MIMO')}>✚ M</button>
+        <button className="sdr-btn danger" title="Create new Rx (receiver) workspace" onClick={handleCreateRx}>✚ Rx</button>
+        <button className="sdr-btn success" title="Create new Tx (transmitter) workspace" onClick={handleCreateTx}>✚ Tx</button>
+        <button
+          className="sdr-btn"
+          title="Toggle Feature Sidebar"
+          style={{ color: featuresOpen ? '#9b59b6' : '#888', background: featuresOpen ? 'rgba(155,89,182,0.2)' : 'transparent' }}
+          onClick={onToggleFeatures}
+        >✚ Features</button>
+      </div>
+
+      <div className="nav-divider" style={{ margin: '0 16px' }}></div>
+
+      {/* Audio Routing & Recording */}
+      <div className="navbar-group" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <span style={{ fontSize: '11px', color: '#888' }}>🔊 Output:</span>
+        <select
+          value={activeAudio?.index ?? -1}
+          onChange={handleAudioChange}
+          style={{ background: 'var(--bg-medium)', border: '1px solid var(--border-color)', color: '#fff', fontSize: '11px', padding: '4px', borderRadius: '4px', maxWidth: '160px' }}
+        >
+          {audioOutDevices.map(d => (
+            <option key={d.index} value={d.index}>{d.name}</option>
+          ))}
+          {audioOutDevices.length === 0 && <option disabled value="-1">No Devices</option>}
+        </select>
+        
+        <input 
+          type="file" 
+          ref={fileInputRef} 
+          style={{ display: 'none' }} 
+          accept=".raw,.wav,.sdriq,.ts,.mp4,.mpg,.mpeg,.mkv,.avi"
+          onChange={handleFileChange} 
+        />
         <button 
           className="sdr-btn" 
-          title="Toggle Feature Sidebar"
-          style={{color: featuresOpen ? '#9b59b6' : '#888', background: featuresOpen ? 'rgba(155,89,182,0.2)' : 'transparent'}}
-          onClick={onToggleFeatures}
-        >✚ F</button>
-      </div>
-      <div className="nav-divider"></div>
-
-      <div className="navbar-group">
-        <button className="sdr-btn" title="Cascade windows" onClick={() => handleStub('Cascade')}>▤</button>
-        <button className="sdr-btn" title="Tile windows" onClick={() => handleStub('Tile')}>◫</button>
-        <button className="sdr-btn" title="Stack windows" onClick={() => handleStub('Stack')}>☰</button>
-        <button className="sdr-btn" title="Auto stack windows" onClick={() => handleStub('Auto Stack')}>⇶</button>
-      </div>
-      <div className="nav-divider"></div>
-
-      <div className="navbar-group">
-        <button className="sdr-btn" title="Dock/Undock workspace" onClick={() => handleStub('Dock/Undock Workspace')}>⎘</button>
-        <button className="sdr-btn" title="Hide workspace" onClick={() => handleStub('Hide Workspace')}>◑</button>
+          title="Upload media to backend for transmission in FileSource/ATVMod"
+          onClick={handleUploadClick}
+        >
+          📤 Upload Media
+        </button>
       </div>
 
       <div style={{ flex: 1 }}></div>
 
+      {/* Status + Preferences */}
       <div className="navbar-group">
         <span style={{ fontSize: '12px', color: isConnected ? '#2ed573' : '#ff4757', marginRight: '10px' }}>
-          {isConnected ? 'API Connected' : 'API Unreachable'}
+          {isConnected ? '🟢 API Connected' : '🔴 API Unreachable'}
         </span>
-        <button className="sdr-btn" title="Preferences" onClick={onOpenPreferences}>⚙️</button>
+        <button className="sdr-btn" title="Open Settings" onClick={onOpenPreferences}>⚙️</button>
+      </div>
+
+      {deviceSelection && (
+        <DeviceSelectionModal
+          direction={deviceSelection.direction}
+          onClose={() => setDeviceSelection(null)}
+          onConfirm={handleConfirmSamplingDevice}
+        />
+      )}
+    </div>
+  );
+}
+
+function DeviceSelectionModal({ direction, onClose, onConfirm }: { direction: 0 | 1, onClose: () => void, onConfirm: (hw: string) => void }) {
+  const [devices, setDevices] = useState<any[]>([]);
+  const [selectedHw, setSelectedHw] = useState<string>('');
+  const [loading, setLoading] = useState(false);
+
+  const fetchDevices = async () => {
+    setLoading(true);
+    try {
+      const devs = await SdrService.getAvailableDevices(direction);
+      const unbound = devs.filter(d => d.deviceSetIndex === -1);
+      setDevices(unbound);
+      if (unbound.length > 0) setSelectedHw(unbound[0].hwType);
+    } catch {}
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchDevices(); }, [direction]);
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" style={{ width: '400px' }} onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <span>Select sampling device</span>
+          <button className="toast-close" onClick={onClose}>✖</button>
+        </div>
+        <div className="modal-body" style={{ padding: '16px' }}>
+           <label style={{ fontSize: '11px', color: '#aaa', display: 'block', marginBottom: '8px' }}>Select from list</label>
+           <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
+             <select 
+               className="sdr-select"
+               style={{ flex: 1, background: '#252528', color: '#fff', border: '1px solid #444', padding: '6px' }}
+               value={selectedHw}
+               onChange={e => setSelectedHw(e.target.value)}
+             >
+               {devices.map(d => (
+                 <option key={d.hwType + d.index} value={d.hwType}>{d.displayedName}</option>
+               ))}
+               {devices.length === 0 && <option disabled value="">No unbound devices</option>}
+             </select>
+             <button className="sdr-btn" onClick={fetchDevices} title="Refresh" style={{ padding: '6px 10px', fontSize: '14px' }}>
+               {loading ? '⌛' : '↻'}
+             </button>
+           </div>
+           
+           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button className="sdr-btn cancel" onClick={onClose} style={{ padding: '6px 16px', background: 'transparent', border: '1px solid #e67e22', color: '#e67e22', borderRadius: '4px' }}>Cancel</button>
+              <button 
+                className="sdr-btn" 
+                disabled={!selectedHw}
+                onClick={() => onConfirm(selectedHw)}
+                style={{ padding: '6px 16px', background: '#333', border: '1px solid #555', color: '#fff', borderRadius: '4px', opacity: selectedHw ? 1 : 0.5 }}
+              >OK</button>
+           </div>
+        </div>
       </div>
     </div>
   );
 }
 
-// ─── PREFERENCES MODAL ────────────────────────────────────────────────────────
+// ==========================================─── PREFERENCES MODAL ────────────────────────────────────────────────────────
 function PreferencesModal({ onClose }: { onClose: () => void }) {
   const [apiHost, setApiHost] = useState('127.0.0.1');
   const [apiPort, setApiPort] = useState('8091');
@@ -189,14 +345,14 @@ function PreferencesModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function PluginRegistryModal({ 
-  onClose, 
-  onApply, 
-  direction 
-}: { 
-  onClose: () => void; 
-  onApply: (pluginId: string) => void; 
-  direction: number 
+function PluginRegistryModal({
+  onClose,
+  onApply,
+  direction
+}: {
+  onClose: () => void;
+  onApply: (pluginId: string) => void;
+  direction: number
 }) {
   const [plugins, setPlugins] = useState<SdrChannelDef[]>([]);
   const [selected, setSelected] = useState('');
@@ -218,15 +374,15 @@ function PluginRegistryModal({
         <div className="modal-body">
           <div className="plugin-list">
             {plugins.map(p => (
-              <div 
-                key={p.id} 
+              <div
+                key={p.id}
                 className={`plugin-item ${selected === p.id ? 'selected' : ''}`}
                 onClick={() => setSelected(p.id)}
               >
-                {p.name} <span style={{fontSize:'10px', color:'#999', float: 'right'}}>v{p.version}</span>
+                {p.name} <span style={{ fontSize: '10px', color: '#999', float: 'right' }}>v{p.version}</span>
               </div>
             ))}
-            {plugins.length === 0 && <span style={{color: '#888', padding: '10px'}}>Loading available plugins...</span>}
+            {plugins.length === 0 && <span style={{ color: '#888', padding: '10px' }}>Loading available plugins...</span>}
           </div>
         </div>
         <div className="modal-footer">
@@ -371,7 +527,7 @@ function FeatureSidebar({ onClose }: { onClose: () => void }) {
           id: String(i),
           title: f.title || f.featureType,
           featureType: f.featureType,
-          running: f.state === 1,
+          running: f.state === 1 || f.state === 'running',
         }));
         setActive(features);
       })
@@ -390,11 +546,17 @@ function FeatureSidebar({ onClose }: { onClose: () => void }) {
   };
 
   const handleToggleRun = async (f: ActiveFeature) => {
+    // Optimistic UI update for immediate response
+    setActive(prev => prev.map(p => p.id === f.id ? { ...p, running: !f.running } : p));
     try {
       await SdrService.runFeature(Number(f.id), !f.running);
       toast(`Feature ${f.running ? 'stopped' : 'started'}`, 'info');
       refresh();
-    } catch { toast('Failed to toggle feature state', 'error'); }
+    } catch {
+      // Revert optimistic update on failure
+      setActive(prev => prev.map(p => p.id === f.id ? { ...p, running: f.running } : p));
+      toast('Failed to toggle feature state', 'error');
+    }
   };
 
   const handleDelete = async (f: ActiveFeature) => {
@@ -413,17 +575,17 @@ function FeatureSidebar({ onClose }: { onClose: () => void }) {
       </div>
 
       {/* Catalog picker */}
-      <div style={{ padding: '8px', borderBottom: '1px solid var(--border-color)', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+      <div style={{ padding: '12px', borderBottom: '1px solid var(--border-color)', display: 'flex', gap: '8px', alignItems: 'center' }}>
         <select
           value={selectedCatalog}
           onChange={e => setSelectedCatalog(e.target.value)}
-          style={{ flex: 1, background: 'var(--bg-medium)', border: '1px solid var(--border-color)', color: '#ddd', fontSize: '12px', padding: '3px' }}
+          style={{ flex: 1, background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: '#fff', fontSize: '13px', padding: '6px 10px', borderRadius: '4px', outline: 'none' }}
         >
           <option value="">Select feature plugin…</option>
           {catalog.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           {catalog.length === 0 && <option disabled>Backend offline</option>}
         </select>
-        <button className="sdr-btn success" onClick={handleAdd}>✚</button>
+        <button className="sdr-btn" onClick={handleAdd} style={{ background: 'rgba(46, 213, 115, 0.15)', color: '#2ed573', border: '1px solid rgba(46,213,115,0.4)', borderRadius: '4px', padding: '6px 12px', fontWeight: 'bold' }}>✚ Add</button>
       </div>
 
       {/* Active features list */}
@@ -434,23 +596,27 @@ function FeatureSidebar({ onClose }: { onClose: () => void }) {
           </div>
         )}
         {active.map(f => (
-          <div key={f.id} className="channel-card" style={{ margin: '6px', padding: 0 }}>
-            <div className="channel-header" style={{ background: f.running ? 'rgba(46,213,115,0.15)' : 'rgba(80,80,80,0.2)' }}>
-              <span style={{ fontWeight: 600, fontSize: '12px' }}>F:{f.id} {f.title}</span>
-              <div className="navbar-group" style={{ marginLeft: 'auto' }}>
+          <div key={f.id} className="channel-card" style={{ margin: '8px', padding: 0, border: '1px solid var(--border-color)', borderRadius: '6px', overflow: 'hidden' }}>
+            <div className="channel-header" style={{ background: f.running ? 'rgba(46,213,115,0.15)' : 'rgba(255,255,255,0.05)', padding: '8px 10px', display: 'flex', alignItems: 'center' }}>
+              <span style={{ fontWeight: 600, fontSize: '13px', color: '#fff' }}>F:{f.id} <span style={{color: '#ddd', fontWeight: 400}}>{f.title}</span></span>
+              <div className="navbar-group" style={{ marginLeft: 'auto', display: 'flex', gap: '6px' }}>
                 <button
                   className="sdr-btn"
-                  style={{ color: f.running ? '#2ed573' : '#aaa' }}
+                  style={{ 
+                    color: f.running ? '#fff' : '#aaa', 
+                    background: f.running ? 'rgba(255, 107, 107, 0.8)' : 'rgba(46, 213, 115, 0.8)',
+                    padding: '4px 10px', borderRadius: '4px', border: 'none', fontSize: '12px', fontWeight: 'bold'
+                  }}
                   onClick={() => handleToggleRun(f)}
-                  title={f.running ? 'Stop' : 'Start'}
+                  title={f.running ? 'Stop Feature' : 'Start Feature'}
                 >
-                  {f.running ? '⏹' : '▶'}
+                  {f.running ? '⏹ Stop' : '▶ Start'}
                 </button>
-                <button className="sdr-btn" style={{ color: '#ff6b6b' }} onClick={() => handleDelete(f)} title="Delete">✖</button>
+                <button className="sdr-btn" style={{ color: '#ff6b6b', background: 'rgba(255,107,107,0.1)', border: '1px solid rgba(255,107,107,0.3)', padding: '4px 8px', borderRadius: '4px' }} onClick={() => handleDelete(f)} title="Delete">✖</button>
               </div>
             </div>
-            <div style={{ padding: '6px 10px', fontSize: '11px', color: '#777' }}>
-              Type: <span style={{ color: '#aaa' }}>{f.featureType}</span>
+            <div style={{ padding: '8px 10px', fontSize: '11px', color: '#aaa', background: 'rgba(0,0,0,0.2)' }}>
+              Plugin: <span style={{ color: '#fff' }}>{f.featureType}</span>
             </div>
           </div>
         ))}
@@ -459,80 +625,205 @@ function FeatureSidebar({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ─── DYNAMIC SETTINGS EDITOR ────────────────────────────────────────────────────
+function DynamicSettingsEditor({ settings, onChange }: { settings: Record<string, any>, onChange: (field: string, value: any) => void }) {
+  // Filter out keys already handled in the main card, or complex nested objects
+  const ignoredKeys = new Set([
+    'inputFrequencyOffset', 'squelch', 'volume', 'inputVolumeFactor', 
+    'title', 'deviceMacAddress', 'rgbColor', 'ts', 'magSqThreshold', 'magSqThresholdIndex',
+    'channelType', 'direction'
+  ]);
+
+  return (
+    <div className="dynamic-settings-grid" style={{
+      display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', 
+      padding: '8px', background: 'rgba(0,0,0,0.15)', borderTop: '1px solid var(--border-color)',
+      maxHeight: '200px', overflowY: 'auto'
+    }}>
+      {Object.entries(settings).map(([key, rawValue]) => {
+        if (ignoredKeys.has(key)) return null;
+        if (typeof rawValue === 'object' && rawValue !== null) return null; // Skip nested structs for now
+        
+        const isBool = key.toLowerCase().includes('mute') 
+          || key.toLowerCase().includes('agc') 
+          || key.toLowerCase().includes('enable')
+          || key.toLowerCase().includes('use')
+          || typeof rawValue === 'boolean';
+
+        if (isBool) {
+          const bVal = rawValue === 1 || rawValue === true || rawValue === 'true';
+          return (
+            <div key={key} className="setting-group compact" style={{ margin: 0 }}>
+              <label style={{ fontSize: '10px' }}>{key}</label>
+              <input type="checkbox" checked={bVal} 
+                onChange={e => onChange(key, e.target.checked ? 1 : 0)} 
+              />
+            </div>
+          );
+        }
+
+        if (typeof rawValue === 'number') {
+          return (
+            <div key={key} className="setting-group compact" style={{ margin: 0 }}>
+              <label style={{ fontSize: '10px' }}>{key}</label>
+              <input type="number" defaultValue={rawValue} 
+                onBlur={e => onChange(key, Number(e.target.value))} 
+                onKeyDown={e => e.key === 'Enter' && e.currentTarget.blur()}
+                style={{ width: '100%', padding: '2px', fontSize: '11px', background: 'var(--bg-medium)', color: '#fff', border: '1px solid var(--border-color)' }}
+              />
+            </div>
+          );
+        }
+
+        if (typeof rawValue === 'string') {
+          return (
+            <div key={key} className="setting-group compact" style={{ margin: 0 }}>
+              <label style={{ fontSize: '10px' }}>{key}</label>
+              <input type="text" defaultValue={rawValue} 
+                onBlur={e => onChange(key, e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && e.currentTarget.blur()}
+                style={{ width: '100%', padding: '2px', fontSize: '11px', background: 'var(--bg-medium)', color: '#fff', border: '1px solid var(--border-color)' }}
+              />
+            </div>
+          );
+        }
+        
+        return null;
+      })}
+    </div>
+  );
+}
+
 function ChannelWorkspaceCard({ dsIdx, cIdx, channel }: { dsIdx: number, cIdx: number, channel: any }) {
   const { toast } = useToast();
   const [squelch, setSquelch] = useState<number>(-50);
   const [gain, setGain] = useState<number>(2);
-  
+
   const handleClose = async () => {
     try {
       await SdrService.deleteChannel(dsIdx, cIdx);
       toast(`${channel.title} removed`, "info");
-    } catch(e) {
+    } catch (e) {
       toast("Failed to remove channel workspace", "error");
     }
   };
 
   const patchChannelSetting = async (field: string, value: number) => {
     try {
-      await SdrService.patchChannelSettings(dsIdx, cIdx, { [field]: value });
+      // SDRangel requires settings wrapped in channelType key.
+      // Fetch current settings → find the wrapper key (e.g. "WFMDemodSettings") → merge → PATCH
+      const current = await SdrService.getChannelSettings(dsIdx, cIdx);
+      const settingsKey = Object.keys(current).find(k => k.endsWith('Settings'));
+      if (!settingsKey) throw new Error('No settings key found in channel response');
+      const merged = {
+        channelType: current.channelType,
+        direction: current.direction,
+        [settingsKey]: { ...current[settingsKey], [field]: value },
+      };
+      await SdrService.patchChannelSettings(dsIdx, cIdx, merged);
+    } catch (e: any) {
+      toast(`Failed to update ${field}: ${e?.message ?? 'API error'}`, 'error');
+    }
+  };
+
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [fullSettings, setFullSettings] = useState<any>(null);
+  const [settingsKey, setSettingsKey] = useState<string>('');
+
+  const toggleExpand = async () => {
+    if (isExpanded) {
+      setIsExpanded(false);
+      return;
+    }
+    try {
+      const current = await SdrService.getChannelSettings(dsIdx, cIdx);
+      const key = Object.keys(current).find(k => k.endsWith('Settings'));
+      if (key && current[key]) {
+        setSettingsKey(key);
+        setFullSettings(current[key]);
+        setIsExpanded(true);
+      } else {
+        toast("No expanded settings available for this plugin", "info");
+      }
     } catch {
-      toast(`Failed to update ${field}`, 'error');
+      toast("Failed to load channel plugin settings", "error");
+    }
+  };
+
+  const handleDynamicChange = async (field: string, value: any) => {
+    if (!settingsKey || !fullSettings) return;
+    try {
+      // Optimistic update
+      setFullSettings((prev: any) => ({ ...prev, [field]: value }));
+      
+      const current = await SdrService.getChannelSettings(dsIdx, cIdx);
+      const merged = {
+        channelType: current.channelType,
+        direction: current.direction,
+        [settingsKey]: { ...current[settingsKey], [field]: value },
+      };
+      await SdrService.patchChannelSettings(dsIdx, cIdx, merged);
+    } catch (e: any) {
+      toast(`Failed to update ${field}: ${e?.message ?? 'API error'}`, 'error');
     }
   };
 
   const openHelp = () => {
-    window.open(`https://github.com/f4exb/sdrangel/blob/master/plugins/channelrx/${channel.id?.toLowerCase()}/readme.md`, '_blank');
+    window.open(`https://github.com/f4exb/sdrangel/wiki/${channel.id}`, '_blank');
   };
 
   const isTx = channel.direction === 1;
 
   return (
     <div className="channel-card">
-       <div className="channel-header" style={{ background: isTx ? 'rgba(255, 71, 87, 0.2)' : 'rgba(46, 213, 115, 0.2)' }}>
-           <span style={{fontWeight: 600}}>
-             {isTx ? 'T' : 'R'}:{dsIdx};{cIdx} &nbsp; 
-             <span style={{color: '#eee'}}>{channel.title}</span>
-           </span>
-           <div className="navbar-group">
-               <button className="sdr-btn" title="Channel Settings (opens docs)" onClick={openHelp}>❔</button>
-               <button className="sdr-btn" title="Move Workspace" onClick={() => toast('Move Workspace: drag-and-drop not supported in web UI', 'info')}>⎘</button>
-               <button className="sdr-btn" title="Close" onClick={handleClose}>✖</button>
-           </div>
-       </div>
-       <div className="channel-body">
-           <div className="freq-display-box" style={{padding: '4px'}}>
-              <span style={{fontSize: '11px', color: '#aaa', alignSelf: 'center'}}>Δf Offset (Hz)</span>
-              <input type="number" className="freq-number" style={{fontSize: '14px', width: '100px', marginLeft: 'auto'}}
-                defaultValue={channel.deltaFrequency}
-                onBlur={e => patchChannelSetting('inputFrequencyOffset', parseInt(e.target.value))}
-              />
-           </div>
-           
-           {!isTx && (
-             <div className="setting-group" style={{marginTop: '4px'}}>
-                <label>Audio Squelch ({squelch} dB)</label>
-                <input type="range" min="-100" max="0" value={squelch}
-                  onChange={e => setSquelch(Number(e.target.value))}
-                  onMouseUp={() => patchChannelSetting('squelch', squelch)} />
-             </div>
-           )}
+      <div className="channel-header" style={{ background: isTx ? 'rgba(255, 71, 87, 0.2)' : 'rgba(46, 213, 115, 0.2)' }}>
+        <span style={{ fontWeight: 600 }}>
+          {isTx ? 'T' : 'R'}:{dsIdx};{cIdx} &nbsp;
+          <span style={{ color: '#eee' }}>{channel.title}</span>
+        </span>
+        <div className="navbar-group">
+          <button className="sdr-btn" title="Toggle Plugin Settings" onClick={toggleExpand}>
+            {isExpanded ? '▲' : '▼'}
+          </button>
+          <button className="sdr-btn" title="Channel Settings (opens docs)" onClick={openHelp}>❔</button>
+          <button className="sdr-btn" title="Close" onClick={handleClose}>✖</button>
+        </div>
+      </div>
+      <div className="channel-body">
+        <div className="freq-display-box" style={{ padding: '4px' }}>
+          <span style={{ fontSize: '11px', color: '#aaa', alignSelf: 'center' }}>Δf Offset (Hz)</span>
+          <input type="number" className="freq-number" style={{ fontSize: '14px', width: '100px', marginLeft: 'auto' }}
+            defaultValue={channel.deltaFrequency}
+            onBlur={e => patchChannelSetting('inputFrequencyOffset', parseInt(e.target.value))}
+          />
+        </div>
 
-           <div className="setting-group" style={{marginTop: isTx ? '4px' : '0'}}>
-              <label>{isTx ? 'Input Gain' : 'Gain (Volume)'} ({gain})</label>
-              <input type="range" min="0" max="10" value={gain}
-                onChange={e => setGain(Number(e.target.value))}
-                onMouseUp={() => patchChannelSetting(isTx ? 'inputVolumeFactor' : 'volume', gain)} />
-           </div>
-       </div>
-       
-       <div className="spectrum-toolbar" style={{borderTop: '1px solid var(--border-color)', marginTop: 'auto', padding: '4px'}}>
-          <button className="sdr-btn" title="Channel is stateless – duplicate not supported" onClick={() => toast('Channel duplication requires hardware re-init', 'info')}>⎘</button>
-          <button className="sdr-btn" title="Attach to another device set" onClick={() => toast('Device binding: stop DSP first, then re-add channel', 'info')}>🔗</button>
-          <span style={{marginLeft: 'auto', fontSize: '10px', color: '#999', alignSelf: 'center'}}>
-             CF: {(channel.deltaFrequency || 0).toLocaleString()} Hz
-          </span>
-       </div>
+        {!isTx && (
+          <div className="setting-group" style={{ marginTop: '4px' }}>
+            <label>Audio Squelch ({squelch} dB)</label>
+            <input type="range" min="-100" max="0" value={squelch}
+              onChange={e => setSquelch(Number(e.target.value))}
+              onMouseUp={() => patchChannelSetting('squelch', squelch)} />
+          </div>
+        )}
+
+        <div className="setting-group" style={{ marginTop: isTx ? '4px' : '0' }}>
+          <label>{isTx ? 'Input Gain' : 'Gain (Volume)'} ({gain})</label>
+          <input type="range" min="0" max="10" value={gain}
+            onChange={e => setGain(Number(e.target.value))}
+            onMouseUp={() => patchChannelSetting(isTx ? 'inputVolumeFactor' : 'volume', gain)} />
+        </div>
+      </div>
+
+      <div className="spectrum-toolbar" style={{ borderTop: '1px solid var(--border-color)', marginTop: 'auto', padding: '4px' }}>
+        <span style={{ marginLeft: 'auto', fontSize: '10px', color: '#999', alignSelf: 'center' }}>
+          CF: {(channel.deltaFrequency || 0).toLocaleString()} Hz
+        </span>
+      </div>
+
+      {isExpanded && fullSettings && (
+        <DynamicSettingsEditor settings={fullSettings} onChange={handleDynamicChange} />
+      )}
     </div>
   );
 }
@@ -543,9 +834,21 @@ function DeviceSidebarCard({ idx, ds, onAddChannel }: { idx: number, ds: DeviceS
   const [freqInput, setFreqInput] = useState("");
   const [hwSettings, setHwSettings] = useState<any>(null);
   const { toast } = useToast();
-  
+
   const hw = ds.samplingDevice;
-  const isRunning = hw?.state === 1;
+  // Fallback state if the backend hasn't updated our poll loop yet
+  const [optimisticState, setOptimisticState] = useState<string | null>(null);
+
+  const isRunning = optimisticState !== null
+    ? optimisticState === 'running'
+    : (hw?.state === 1 || hw?.state === 'running');
+
+  // Clear optimistic state when the real prop catches up
+  useEffect(() => {
+    if (hw?.state === optimisticState) {
+      setOptimisticState(null);
+    }
+  }, [hw?.state, optimisticState]);
 
   useEffect(() => {
     if (!isTuning) {
@@ -559,7 +862,7 @@ function DeviceSidebarCard({ idx, ds, onAddChannel }: { idx: number, ds: DeviceS
         const fullSettings = await SdrService.getDeviceSettings(idx);
         const key = Object.keys(fullSettings).find(k => k.endsWith('Settings'));
         if (key) setHwSettings(fullSettings[key]);
-      } catch (e) {}
+      } catch (e) { }
     };
     fetchHw();
     const inv = setInterval(fetchHw, 3000);
@@ -584,7 +887,7 @@ function DeviceSidebarCard({ idx, ds, onAddChannel }: { idx: number, ds: DeviceS
     try {
       await SdrService.deleteDeviceSet(idx);
       toast(`Workspace ${idx} closed`, "info");
-    } catch(e) {
+    } catch (e) {
       toast("Failed to close Device Workspace", "error");
     }
   };
@@ -593,7 +896,7 @@ function DeviceSidebarCard({ idx, ds, onAddChannel }: { idx: number, ds: DeviceS
     try {
       await SdrService.setDeviceState(idx, 0);
       setTimeout(async () => {
-        try { await SdrService.setDeviceState(idx, 1); } catch {}
+        try { await SdrService.setDeviceState(idx, 1); } catch { }
         toast(`Device ${idx} reloaded`, 'success');
       }, 600);
     } catch { toast('Failed to reload device', 'error'); }
@@ -607,15 +910,15 @@ function DeviceSidebarCard({ idx, ds, onAddChannel }: { idx: number, ds: DeviceS
   };
 
   const handlePowerDrop = async () => {
+    const targetState = isRunning ? 0 : 1;
+    setOptimisticState(targetState ? 'running' : 'idle');
     try {
-      await SdrService.setDeviceState(idx, isRunning ? 0 : 1);
-    } catch(e) {
+      await SdrService.setDeviceState(idx, targetState);
+    } catch (e) {
+      setOptimisticState(null); // revert on failure
       toast("Failed to toggle DSP engine state", "error");
     }
   };
-
-  const handleStub = (name: string) => toast(name, "info");
-
 
   return (
     <div className="device-card">
@@ -627,31 +930,27 @@ function DeviceSidebarCard({ idx, ds, onAddChannel }: { idx: number, ds: DeviceS
           <span className="hw-label">{hw?.hwType || 'No Hardware'}</span>
         </div>
         <div className="navbar-group">
-          <button className="sdr-btn" title="Open SDRangel docs in browser" onClick={() => window.open('https://github.com/f4exb/sdrangel/blob/master/doc/MainWindow.md', '_blank')}>❔</button>
-          <button className="sdr-btn" title="Move to another workspace (UI-only panels not supported)" onClick={() => toast('Workspace panels are fixed in web layout', 'info')}>⎘</button>
+          <button className="sdr-btn" title="Open SDRangel docs in browser" onClick={() => window.open('https://github.com/f4exb/sdrangel/wiki', '_blank')}>❔</button>
           <button className="sdr-btn" title="Close workspace" onClick={handleDelete}>✖</button>
         </div>
       </div>
 
       <div className="device-toolbar">
-        <button className="sdr-btn" title="Device common settings" onClick={() => handleStub('Device Common Settings: see gain/rate sliders below')}>⚙️</button>
-        <button className="sdr-btn" title="Change device" onClick={() => handleStub('Change Device: stop DSP first, then use SDRangel GUI to swap hardware')}>🔁</button>
         <button className="sdr-btn" title="Reload device (stop → start DSP)" onClick={handleReloadDevice}>🌐</button>
-        <button className="sdr-btn" title="Open Preset Manager" onClick={() => toast('Open the ⭐ button in the top navbar to manage presets', 'info')}>⭐</button>
-        <button className="sdr-btn" title="Add channels" style={{marginLeft: 'auto'}} onClick={onAddChannel}>✚</button>
+        <button className="sdr-btn" title="Add channels" style={{ marginLeft: 'auto' }} onClick={onAddChannel}>✚</button>
       </div>
 
       <div className="freq-display-box">
-        <button 
-          className={`freq-play-btn ${isRunning ? 'running' : 'stopped'}`} 
+        <button
+          className={`freq-play-btn ${isRunning ? 'running' : 'stopped'}`}
           onClick={handlePowerDrop}
           title={isRunning ? "Stop DSP Device" : "Start DSP Device"}
         >
-          {isRunning ? <span style={{color: '#fff', fontSize: '18px'}}>⏹</span> : <span style={{color: '#fff', fontSize: '18px'}}>▶</span>}
+          {isRunning ? <span style={{ color: '#fff', fontSize: '18px' }}>⏹</span> : <span style={{ color: '#fff', fontSize: '18px' }}>▶</span>}
         </button>
         <div className="freq-input-wrapper">
-          <input 
-            type="text" 
+          <input
+            type="text"
             value={freqInput}
             onChange={(e) => { setIsTuning(true); setFreqInput(e.target.value); }}
             onBlur={handleApplyFreq}
@@ -668,9 +967,9 @@ function DeviceSidebarCard({ idx, ds, onAddChannel }: { idx: number, ds: DeviceS
           {hwSettings.devSampleRate !== undefined && (
             <div className="setting-group">
               <label>Sample Rate</label>
-              <input type="number" 
-                value={hwSettings.devSampleRate} 
-                onChange={(e) => setHwSettings({...hwSettings, devSampleRate: parseInt(e.target.value)})}
+              <input type="number"
+                value={hwSettings.devSampleRate}
+                onChange={(e) => setHwSettings({ ...hwSettings, devSampleRate: parseInt(e.target.value) })}
                 onBlur={(e) => patchSetting('devSampleRate', parseInt(e.target.value))}
               />
             </div>
@@ -678,9 +977,9 @@ function DeviceSidebarCard({ idx, ds, onAddChannel }: { idx: number, ds: DeviceS
           {hwSettings.log2Decim !== undefined && (
             <div className="setting-group">
               <label>Decim (Log2)</label>
-              <input type="number" min="0" max="6" 
+              <input type="number" min="0" max="6"
                 value={hwSettings.log2Decim}
-                onChange={(e) => setHwSettings({...hwSettings, log2Decim: parseInt(e.target.value)})}
+                onChange={(e) => setHwSettings({ ...hwSettings, log2Decim: parseInt(e.target.value) })}
                 onBlur={(e) => patchSetting('log2Decim', parseInt(e.target.value))}
               />
             </div>
@@ -688,9 +987,9 @@ function DeviceSidebarCard({ idx, ds, onAddChannel }: { idx: number, ds: DeviceS
           {hwSettings.gain !== undefined && (
             <div className="setting-group">
               <label>Hardware Gain</label>
-              <input type="range" min="0" max="80" 
-                value={hwSettings.gain} 
-                onChange={(e) => setHwSettings({...hwSettings, gain: parseInt(e.target.value)})}
+              <input type="range" min="0" max="80"
+                value={hwSettings.gain}
+                onChange={(e) => setHwSettings({ ...hwSettings, gain: parseInt(e.target.value) })}
                 onMouseUp={() => patchSetting('gain', hwSettings.gain)}
               />
             </div>
@@ -699,8 +998,8 @@ function DeviceSidebarCard({ idx, ds, onAddChannel }: { idx: number, ds: DeviceS
             <div className="setting-group">
               <label>LNA Gain</label>
               <input type="range" min="0" max="40" step="8"
-                value={hwSettings.lnaGain} 
-                onChange={(e) => setHwSettings({...hwSettings, lnaGain: parseInt(e.target.value)})}
+                value={hwSettings.lnaGain}
+                onChange={(e) => setHwSettings({ ...hwSettings, lnaGain: parseInt(e.target.value) })}
                 onMouseUp={() => patchSetting('lnaGain', hwSettings.lnaGain)}
               />
             </div>
@@ -709,8 +1008,8 @@ function DeviceSidebarCard({ idx, ds, onAddChannel }: { idx: number, ds: DeviceS
             <div className="setting-group">
               <label>VGA Gain</label>
               <input type="range" min="0" max="62" step="2"
-                value={hwSettings.vgaGain} 
-                onChange={(e) => setHwSettings({...hwSettings, vgaGain: parseInt(e.target.value)})}
+                value={hwSettings.vgaGain}
+                onChange={(e) => setHwSettings({ ...hwSettings, vgaGain: parseInt(e.target.value) })}
                 onMouseUp={() => patchSetting('vgaGain', hwSettings.vgaGain)}
               />
             </div>
@@ -723,41 +1022,42 @@ function DeviceSidebarCard({ idx, ds, onAddChannel }: { idx: number, ds: DeviceS
 
 function SpectrumVisualizer({
   freqMhz, isConnected, gridMode, maxHold, colorMap, dbRange, refLevel,
-  showWaterfall, phosphorMode, avgMode, binsRef, dataSource,
-}: { 
+  showWaterfall, phosphorMode, avgMode, spectrumMode, binsRef, dataSource,
+}: {
   freqMhz: string; isConnected: boolean; gridMode: boolean; maxHold: boolean;
   colorMap: string; dbRange: number; refLevel: number;
   showWaterfall: boolean; phosphorMode: boolean; avgMode: boolean;
+  spectrumMode: 'line' | 'histogram';
   binsRef: React.MutableRefObject<Float32Array | null>;
   dataSource: DataSource;
 }) {
-  const plotRef      = useRef<HTMLCanvasElement>(null);
+  const plotRef = useRef<HTMLCanvasElement>(null);
   const waterfallRef = useRef<HTMLCanvasElement>(null);
   // binsRef is passed from parent — RAF loop reads current value directly (no re-render)
 
   useEffect(() => {
     const plotCanvas = plotRef.current;
-    const wfCanvas   = waterfallRef.current;
+    const wfCanvas = waterfallRef.current;
     if (!plotCanvas) return;
 
     const plotCtx = plotCanvas.getContext('2d');
     if (!plotCtx) return;
 
-    const wfCtx     = wfCanvas ? wfCanvas.getContext('2d') : null;
-    const w         = plotCanvas.width;
-    const hPlot     = plotCanvas.height;
-    const hWF       = wfCanvas ? wfCanvas.height : 0;
+    const wfCtx = wfCanvas ? wfCanvas.getContext('2d') : null;
+    const w = plotCanvas.width;
+    const hPlot = plotCanvas.height;
+    const hWF = wfCanvas ? wfCanvas.height : 0;
 
     // Waterfall backing buffer
-    const wfBacking    = document.createElement('canvas');
-    wfBacking.width    = w;
-    wfBacking.height   = hWF;
-    const wfBackCtx    = wfBacking.getContext('2d');
+    const wfBacking = document.createElement('canvas');
+    wfBacking.width = w;
+    wfBacking.height = hWF;
+    const wfBackCtx = wfBacking.getContext('2d');
 
     // Persistent state across frames
     const maxBuffer = new Float32Array(w).fill(-140);
     const avgBuffer = new Float32Array(w).fill(-100);
-    let   reqId: number;
+    let reqId: number;
 
     // ── dBFS → canvas Y ─────────────────────────────────────────────
     // refLevel  = top of display (e.g. 0 dBFS)
@@ -778,7 +1078,7 @@ function SpectrumVisualizer({
       if (colorMap === 'Ice') {
         return [
           Math.min(255, Math.floor(Math.max(0, v - 0.6) * 2.5 * 255)),
-          Math.min(255, Math.floor(Math.max(0, v - 0.3) * 2   * 255)),
+          Math.min(255, Math.floor(Math.max(0, v - 0.3) * 2 * 255)),
           Math.min(255, Math.floor(v * 2 * 255)),
         ];
       }
@@ -790,17 +1090,17 @@ function SpectrumVisualizer({
     };
 
     const draw = () => {
-      const bins    = binsRef.current;
-      const n       = bins ? bins.length : w;
-      const step    = n / w; // how many FFT bins per canvas pixel
+      const bins = binsRef.current;
+      const n = bins ? bins.length : w;
+      const step = n / w; // how many FFT bins per canvas pixel
 
       // Build a per-pixel dB array (average bins that map to the same pixel)
       const pxdB = new Float32Array(w);
       if (bins) {
         for (let px = 0; px < w; px++) {
           const startBin = Math.floor(px * step);
-          const endBin   = Math.min(n - 1, Math.floor((px + 1) * step));
-          let   sum = 0, cnt = 0;
+          const endBin = Math.min(n - 1, Math.floor((px + 1) * step));
+          let sum = 0, cnt = 0;
           for (let b = startBin; b <= endBin; b++) { sum += bins[b]; cnt++; }
           pxdB[px] = cnt > 0 ? sum / cnt : -120;
         }
@@ -823,7 +1123,7 @@ function SpectrumVisualizer({
 
       if (gridMode) {
         plotCtx.strokeStyle = 'rgba(255,255,255,0.06)';
-        plotCtx.lineWidth   = 1;
+        plotCtx.lineWidth = 1;
         plotCtx.beginPath();
         for (let x = 0; x < w; x += 50) { plotCtx.moveTo(x, 0); plotCtx.lineTo(x, hPlot); }
         for (let y = 0; y < hPlot; y += 25) { plotCtx.moveTo(0, y); plotCtx.lineTo(w, y); }
@@ -844,27 +1144,44 @@ function SpectrumVisualizer({
         plotCtx.fillRect(0, 0, w, hPlot);
       }
 
-      // FFT trace (gradient fill)
+      // FFT trace
       plotCtx.beginPath();
-      plotCtx.strokeStyle = 'rgba(255,255,0,0.9)';
-      plotCtx.lineWidth   = 1.5;
       plotCtx.moveTo(0, binToY(displayBins[0]));
       for (let px = 1; px < w; px++) plotCtx.lineTo(px, binToY(displayBins[px]));
-      plotCtx.stroke();
 
-      plotCtx.lineTo(w, hPlot);
-      plotCtx.lineTo(0, hPlot);
-      const grad = plotCtx.createLinearGradient(0, 0, 0, hPlot);
-      grad.addColorStop(0, 'rgba(255,255,0,0.35)');
-      grad.addColorStop(1, 'rgba(255,255,0,0.02)');
-      plotCtx.fillStyle = grad;
-      plotCtx.fill();
+      if (spectrumMode === 'histogram') {
+        plotCtx.fillStyle = 'rgba(255,165,0,0.3)';
+        plotCtx.lineTo(w, hPlot);
+        plotCtx.lineTo(0, hPlot);
+        
+        const grad = plotCtx.createLinearGradient(0, 0, 0, hPlot);
+        grad.addColorStop(0, 'rgba(255,165,0,0.6)');
+        grad.addColorStop(1, 'rgba(255,165,0,0.1)');
+        plotCtx.fillStyle = grad;
+        plotCtx.fill();
+        
+        // draw a subtle top line
+        plotCtx.beginPath();
+        plotCtx.strokeStyle = 'rgba(255,200,0,0.8)';
+        plotCtx.lineWidth = 1;
+        plotCtx.moveTo(0, binToY(displayBins[0]));
+        for (let px = 1; px < w; px++) plotCtx.lineTo(px, binToY(displayBins[px]));
+        plotCtx.stroke();
+      } else {
+        // Just the line trace
+        plotCtx.beginPath();
+        plotCtx.strokeStyle = 'rgba(255,255,0,0.9)';
+        plotCtx.lineWidth = 1.5;
+        plotCtx.moveTo(0, binToY(displayBins[0]));
+        for (let px = 1; px < w; px++) plotCtx.lineTo(px, binToY(displayBins[px]));
+        plotCtx.stroke();
+      }
 
       // Max hold (red)
       if (maxHold) {
         plotCtx.beginPath();
         plotCtx.strokeStyle = 'rgba(255,60,60,0.85)';
-        plotCtx.lineWidth   = 1;
+        plotCtx.lineWidth = 1;
         plotCtx.moveTo(0, binToY(maxBuffer[0]));
         for (let px = 1; px < w; px++) plotCtx.lineTo(px, binToY(maxBuffer[px]));
         plotCtx.stroke();
@@ -877,7 +1194,7 @@ function SpectrumVisualizer({
         for (let px = 0; px < w; px++) {
           const [r, g, b] = colorize(binToV(pxdB[px]));
           const i4 = px * 4;
-          imgData.data[i4]     = r;
+          imgData.data[i4] = r;
           imgData.data[i4 + 1] = g;
           imgData.data[i4 + 2] = b;
           imgData.data[i4 + 3] = 255;
@@ -892,9 +1209,8 @@ function SpectrumVisualizer({
 
     reqId = requestAnimationFrame(draw);
     return () => { cancelAnimationFrame(reqId); };
-  // Only restart RAF loop when display _settings_ change, not on every FFT frame
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gridMode, maxHold, colorMap, dbRange, refLevel, showWaterfall, phosphorMode, avgMode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gridMode, maxHold, colorMap, dbRange, refLevel, showWaterfall, phosphorMode, avgMode, spectrumMode]);
 
   // Source badge color
   const badgeColor = dataSource === 'LIVE' ? '#2ed573' : dataSource === 'DEMO' ? '#f39c12' : '#ff4757';
@@ -916,7 +1232,7 @@ function SpectrumVisualizer({
           </span>
           {!isConnected && <span style={{ fontSize: '9px', color: '#ff4757' }}>(API Offline)</span>}
         </div>
-        <canvas ref={plotRef} width={900} height={220}
+        <canvas ref={plotRef} id="spectrum-plot" width={900} height={220}
           style={{ width: '100%', height: '100%', background: 'var(--bg-dark)', display: 'block' }} />
         <div className="spectrum-axis" style={{ position: 'absolute', bottom: 0, width: '100%' }}>
           <span>{(parseFloat(freqMhz) - 0.020).toFixed(3)}</span>
@@ -955,9 +1271,9 @@ function MainWorkspace({ deviceSets, isConnected }: { deviceSets: DeviceSet[], i
 
   const mainRx = deviceSets.find(d => d.samplingDevice?.direction === 0);
   const mainRxIdx = deviceSets.findIndex(d => d.samplingDevice?.direction === 0);
-  const isRxRunning = mainRx?.samplingDevice?.state === 1;
-  const freqMhz = mainRx?.samplingDevice?.centerFrequency 
-    ? (mainRx.samplingDevice.centerFrequency / 1000000).toFixed(3) 
+  const isRxRunning = mainRx?.samplingDevice?.state === 1 || mainRx?.samplingDevice?.state === 'running';
+  const freqMhz = mainRx?.samplingDevice?.centerFrequency
+    ? (mainRx.samplingDevice.centerFrequency / 1000000).toFixed(3)
     : '435.000';
 
   // ── Phase 7: ref-based spectrum data (zero re-render on frame) ──────────
@@ -975,14 +1291,42 @@ function MainWorkspace({ deviceSets, isConnected }: { deviceSets: DeviceSet[], i
   });
 
   const handleAutoScale = () => {
-    // Reset to sensible defaults
-    setDbRange(100);
-    setRefLevel(0);
-    toast('Auto-scale: reset to 100 dBFS range, 0 dBm ref', 'info');
+    if (!binsRef.current) {
+      setDbRange(100);
+      setRefLevel(0);
+      return;
+    }
+    const bins = binsRef.current;
+    let maxBin = -1000, sum = 0;
+    for (let i = 0; i < bins.length; i++) {
+       if (bins[i] > maxBin) maxBin = bins[i];
+       sum += bins[i];
+    }
+    const avg = sum / bins.length;
+    // Set refLevel slightly above the max peak (+5 dB)
+    const newRef = Math.ceil((maxBin + 5) / 10) * 10;
+    // Set dbRange so the noise floor is near the bottom (-15 dB below avg)
+    const newFloor = Math.floor((avg - 15) / 10) * 10;
+    const newRange = Math.max(40, newRef - newFloor);
+    
+    setRefLevel(newRef);
+    setDbRange(newRange);
+    toast(`Auto-scaled: Ref ${newRef}dB, Range ${newRange}dB`, 'success');
+  };
+
+  const handleSaveImage = () => {
+    const canvas = document.getElementById('spectrum-plot') as HTMLCanvasElement;
+    if (!canvas) return toast('Spectrum canvas not found', 'error');
+    
+    const link = document.createElement('a');
+    link.download = `sdr_spectrum_snapshot_${Date.now()}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+    toast('Spectrum image saved to Downloads', 'success');
   };
 
   // Flatten all channels from all deviceSets into one array to render them globally dynamically
-  const allChannels = deviceSets.flatMap((ds, dsIdx) => 
+  const allChannels = deviceSets.flatMap((ds, dsIdx) =>
     (ds.channels || []).map((ch, cIdx) => ({ dsIdx, cIdx, channel: ch }))
   );
 
@@ -992,15 +1336,13 @@ function MainWorkspace({ deviceSets, isConnected }: { deviceSets: DeviceSet[], i
         <div className="spectrum-header">
           <div className="navbar-group">
             <span className="rx-badge">M:0</span>
-            <span style={{color: '#ddd', fontSize: '12px', marginLeft: '8px', fontWeight: 600}}>
+            <span style={{ color: '#ddd', fontSize: '12px', marginLeft: '8px', fontWeight: 600 }}>
               Spectrum {spectrumMode === 'histogram' ? '[Histogram]' : ''}
             </span>
           </div>
           <div className="navbar-group">
             <button className="sdr-btn" title="Open SDRangel spectrum docs"
-              onClick={() => window.open('https://github.com/f4exb/sdrangel/blob/master/sdrgui/gui/spectrum.md', '_blank')}>❔</button>
-            <button className="sdr-btn" title="Move Workspace (fixed in web layout)"
-              onClick={() => toast('Spectrum panel is pinned in web layout', 'info')}>⎘</button>
+              onClick={() => window.open('https://github.com/f4exb/sdrangel/wiki/Spectrum-display', '_blank')}>❔</button>
             <button className="sdr-btn" title="Shrink spectrum height"
               onClick={() => toast('Resize handled by browser — drag the panel divider', 'info')}>↙</button>
             <button className="sdr-btn" title="Expand spectrum height"
@@ -1010,20 +1352,21 @@ function MainWorkspace({ deviceSets, isConnected }: { deviceSets: DeviceSet[], i
               onClick={() => setShowWaterfall(v => !v)}>⊘</button>
           </div>
         </div>
-        
-        <SpectrumVisualizer 
-           freqMhz={freqMhz} 
-           isConnected={deviceSets.length > 0} 
-           gridMode={gridMode}
-           maxHold={maxHold}
-           colorMap={colorMap}
-           dbRange={dbRange}
-           refLevel={refLevel}
-           showWaterfall={showWaterfall}
-           phosphorMode={phosphorMode}
-           avgMode={avgMode}
-           binsRef={binsRef}
-           dataSource={dataSource}
+
+        <SpectrumVisualizer
+          freqMhz={freqMhz}
+          isConnected={deviceSets.length > 0}
+          gridMode={gridMode}
+          maxHold={maxHold}
+          colorMap={colorMap}
+          dbRange={dbRange}
+          refLevel={refLevel}
+          showWaterfall={showWaterfall}
+          phosphorMode={phosphorMode}
+          avgMode={avgMode}
+          spectrumMode={spectrumMode}
+          binsRef={binsRef}
+          dataSource={dataSource}
         />
 
         <div className="spectrum-toolbar">
@@ -1034,20 +1377,18 @@ function MainWorkspace({ deviceSets, isConnected }: { deviceSets: DeviceSet[], i
           {/* Phosphor decay */}
           <button className="sdr-btn" title="Phosphor (decay) mode" style={{ color: phosphorMode ? '#7bed9f' : '#aaa', background: phosphorMode ? 'rgba(123,237,159,0.15)' : 'transparent' }} onClick={() => setPhosphorMode(v => !v)}>⚡</button>
           {/* Max hold */}
-          <button className="sdr-btn" title="Max hold" style={{color: '#f44', background: maxHold ? '#522' : 'transparent' }} onClick={() => setMaxHold(!maxHold)}>📈</button>
+          <button className="sdr-btn" title="Max hold" style={{ color: '#f44', background: maxHold ? '#522' : 'transparent' }} onClick={() => setMaxHold(!maxHold)}>📈</button>
           {/* Average toggle */}
           <button className="sdr-btn" title="Average mode" style={{ color: avgMode ? '#fff' : '#777', background: avgMode ? '#333' : 'transparent' }} onClick={() => setAvgMode(v => !v)}>↑</button>
-          {/* Decimation (passthrough info) */}
-          <button className="sdr-btn" title="Decimation: set via device sample rate slider" onClick={() => toast('Decimation is controlled by the device sample rate slider', 'info')}>◎</button>
           {/* Spectrum mode */}
           <button className="sdr-btn" title="Spectrum display mode (line/histogram)"
-            style={{color: '#fa0', background: spectrumMode === 'histogram' ? 'rgba(255,165,0,0.2)' : 'transparent'}}
+            style={{ color: '#fa0', background: spectrumMode === 'histogram' ? 'rgba(255,165,0,0.2)' : 'transparent' }}
             onClick={() => setSpectrumMode(m => m === 'line' ? 'histogram' : 'line')}>◬</button>
 
           <div className="toolbar-knob">
             <select value={colorMap} onChange={e => setColorMap(e.target.value)}>
-               <option value="Angel">Angel</option>
-               <option value="Ice">Ice</option>
+              <option value="Angel">Angel</option>
+              <option value="Ice">Ice</option>
             </select>
           </div>
 
@@ -1059,29 +1400,28 @@ function MainWorkspace({ deviceSets, isConnected }: { deviceSets: DeviceSet[], i
           {/* Auto-scale */}
           <button className="sdr-btn" title="Auto-scale (reset dB range)" onClick={handleAutoScale}>A</button>
 
-          <div className="toolbar-knob" style={{display: 'flex', alignItems: 'center', gap: '4px'}}>
-            <span style={{fontSize: '9px', color: '#666'}}>↕ DB</span>
-            <input type="number" value={refLevel} onChange={e => setRefLevel(Number(e.target.value))} style={{width: '35px', background: 'transparent', border:'none', color:'#fff', fontSize:'11px'}} />
+          <div className="toolbar-knob" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: '9px', color: '#666' }}>↕ DB</span>
+            <input type="number" value={refLevel} onChange={e => setRefLevel(Number(e.target.value))} style={{ width: '35px', background: 'transparent', border: 'none', color: '#fff', fontSize: '11px' }} />
           </div>
-          <div className="toolbar-knob" style={{display: 'flex', alignItems: 'center', gap: '4px'}}>
-            <span style={{fontSize: '9px', color: '#666'}}>⤢ DB</span>
-            <input type="number" value={dbRange} onChange={e => setDbRange(Number(e.target.value))} style={{width: '35px', background: 'transparent', border:'none', color:'#fff', fontSize:'11px'}} />
+          <div className="toolbar-knob" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: '9px', color: '#666' }}>⤢ DB</span>
+            <input type="number" value={dbRange} onChange={e => setDbRange(Number(e.target.value))} style={{ width: '35px', background: 'transparent', border: 'none', color: '#fff', fontSize: '11px' }} />
           </div>
           <div className="toolbar-knob">
-            <input type="number" style={{width: '30px', background: 'transparent', border:'none', color:'#fff', fontSize:'11px'}} defaultValue="20" title="Waterfall depth (ms/row)" />
+            <input type="number" style={{ width: '30px', background: 'transparent', border: 'none', color: '#fff', fontSize: '11px' }} defaultValue="20" title="Waterfall depth (ms/row)" />
           </div>
 
-          <button className="sdr-btn" title="Save spectrum image" onClick={() => toast('Right-click the canvas to save as image', 'info')}>💾</button>
-          <button className="sdr-btn" title="Network stream: requires backend WebSocket support" onClick={() => toast('WebSocket spectrum stream: enable usrsctp in custom SDRangel build', 'warning')}>((•))</button>
-          <button className="sdr-btn" title="Spectrum settings" onClick={() => window.open('https://github.com/f4exb/sdrangel/blob/master/sdrgui/gui/spectrum.md#spectrum-display-settings', '_blank')}>🔧</button>
+          <button className="sdr-btn" title="Save spectrum snapshot" onClick={handleSaveImage}>💾</button>
+          <button className="sdr-btn" title="Spectrum settings" onClick={() => window.open('https://github.com/f4exb/sdrangel/wiki/Spectrum-display', '_blank')}>🔧</button>
         </div>
       </div>
-      
+
       {/* Plugin Grid - Render all attached channels */}
       <div style={{ flex: '0 1 320px', display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto' }}>
-         {allChannels.map(({dsIdx, cIdx, channel}) => (
-            <ChannelWorkspaceCard key={`${dsIdx}-${cIdx}`} dsIdx={dsIdx} cIdx={cIdx} channel={channel} />
-         ))}
+        {allChannels.map(({ dsIdx, cIdx, channel }) => (
+          <ChannelWorkspaceCard key={`${dsIdx}-${cIdx}`} dsIdx={dsIdx} cIdx={cIdx} channel={channel} />
+        ))}
       </div>
     </div>
   );
@@ -1091,7 +1431,8 @@ function SdrApplication() {
   const [deviceSets, setDeviceSets] = useState<DeviceSet[]>([]);
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [hasNotifiedOffline, setHasNotifiedOffline] = useState(false);
-  
+  const [audioOutDevices, setAudioOutDevices] = useState<any[]>([]);
+
   // Modal / sidebar visibility
   const [registryTarget, setRegistryTarget] = useState<number | null>(null);
   const [showPresets, setShowPresets] = useState(false);
@@ -1103,8 +1444,14 @@ function SdrApplication() {
   useEffect(() => {
     const fetchSdrStatus = async () => {
       try {
-        const data = await SdrService.getDeviceSets();
-        setDeviceSets(data?.deviceSets || []);
+        const [dsData, audioData] = await Promise.all([
+          SdrService.getDeviceSets(),
+          SdrService.getAudio().catch(() => null)
+        ]);
+        setDeviceSets(dsData?.deviceSets || []);
+        if (audioData?.outputDevices) {
+           setAudioOutDevices(audioData.outputDevices);
+        }
         if (!isConnected) {
           setIsConnected(true);
           setHasNotifiedOffline(false);
@@ -1143,23 +1490,24 @@ function SdrApplication() {
         onToggleFeatures={() => setShowFeatures(v => !v)}
         featuresOpen={showFeatures}
         onOpenPreferences={() => setShowPreferences(true)}
+        audioOutDevices={audioOutDevices}
       />
-      
+
       <div className="main-stage">
         {/* LEFT PANEL – Device Sidebar */}
         <div className="sidebar">
           {deviceSets.length === 0 && (
-             <div style={{padding: '20px', color: '#666', textAlign: 'center'}}>
-               <p>No devices active.</p>
-               <p style={{fontSize:'12px', marginTop:'10px'}}>Use the + Rx or + Tx buttons in the top navbar.</p>
-             </div>
+            <div style={{ padding: '20px', color: '#666', textAlign: 'center' }}>
+              <p>No devices active.</p>
+              <p style={{ fontSize: '12px', marginTop: '10px' }}>Use the + Rx or + Tx buttons in the top navbar.</p>
+            </div>
           )}
           {deviceSets.map((ds, idx) => (
-            <DeviceSidebarCard 
-               key={idx} 
-               idx={idx} 
-               ds={ds} 
-               onAddChannel={() => setRegistryTarget(idx)}
+            <DeviceSidebarCard
+              key={idx}
+              idx={idx}
+              ds={ds}
+              onAddChannel={() => setRegistryTarget(idx)}
             />
           ))}
         </div>
@@ -1175,7 +1523,7 @@ function SdrApplication() {
 
       {/* Modals */}
       {registryTarget !== null && deviceSets[registryTarget] && (
-        <PluginRegistryModal 
+        <PluginRegistryModal
           onClose={() => setRegistryTarget(null)}
           onApply={handleApplyPlugin}
           direction={deviceSets[registryTarget].samplingDevice?.direction || 0}

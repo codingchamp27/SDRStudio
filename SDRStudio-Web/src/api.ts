@@ -39,6 +39,19 @@ export const SdrService = {
     return response.data;
   },
 
+  getAvailableDevices: async (direction: number) => {
+    const response = await sdrApi.get(`/devices?direction=${direction}`);
+    return response.data.devices as any[];
+  },
+
+  attachDeviceHardware: async (deviceSetIndex: number, hwType: string, direction: number) => {
+    const response = await sdrApi.put(`/deviceset/${deviceSetIndex}/device`, {
+      hwType,
+      direction
+    });
+    return response.data;
+  },
+
   getChannels: async (direction: number) => {
     const response = await sdrApi.get(`/channels?direction=${direction}`);
     return response.data.channels as SdrChannelDef[];
@@ -63,6 +76,11 @@ export const SdrService = {
     return response.data;
   },
 
+  getChannelSettings: async (deviceSetIndex: number, channelIndex: number) => {
+    const response = await sdrApi.get(`/deviceset/${deviceSetIndex}/channel/${channelIndex}/settings`);
+    return response.data;
+  },
+
   // Per-Device Operations
   getDeviceSettings: async (deviceSetIndex: number) => {
     const response = await sdrApi.get(`/deviceset/${deviceSetIndex}/device/settings`);
@@ -75,10 +93,13 @@ export const SdrService = {
   },
 
   setDeviceState: async (deviceSetIndex: number, state: 0 | 1 ) => {
-    const response = await sdrApi.post(`/deviceset/${deviceSetIndex}/device/run`, {
-      state: state
-    });
-    return response.data;
+    if (state === 1) {
+      const response = await sdrApi.post(`/deviceset/${deviceSetIndex}/device/run`);
+      return response.data;
+    } else {
+      const response = await sdrApi.delete(`/deviceset/${deviceSetIndex}/device/run`);
+      return response.data;
+    }
   },
 
   // ---- FEATURES ----
@@ -89,22 +110,36 @@ export const SdrService = {
 
   getFeatureSet: async () => {
     const response = await sdrApi.get('/featureset');
-    return response.data;
+    const data = response.data;
+    if (data && data.features) {
+       const featuresWithState = await Promise.all(data.features.map(async (f: any) => {
+         try {
+           const runRes = await sdrApi.get(`/featureset/feature/${f.index}/run`);
+           f.state = runRes.data.state;
+         } catch {
+           f.state = 'idle';
+         }
+         return f;
+       }));
+       data.features = featuresWithState;
+    }
+    return data;
   },
 
   addFeature: async (featureType: string) => {
-    const response = await sdrApi.post('/featureset/0/feature', { featureType });
+    // Correct endpoint: POST /featureset/feature  (no /0/ in path)
+    const response = await sdrApi.post('/featureset/feature', { featureType });
     return response.data;
   },
 
   deleteFeature: async (featureIndex: number) => {
-    const response = await sdrApi.delete(`/featureset/0/feature/${featureIndex}`);
+    const response = await sdrApi.delete(`/featureset/feature/${featureIndex}`);
     return response.data;
   },
 
   runFeature: async (featureIndex: number, start: boolean) => {
-    const response = await sdrApi.post(`/featureset/0/feature/${featureIndex}/run`, {
-      state: start ? 1 : 0
+    const response = await sdrApi.post(`/featureset/feature/${featureIndex}/run`, {
+      state: start ? 'running' : 'idle'
     });
     return response.data;
   },
@@ -152,4 +187,16 @@ export const SdrService = {
     });
     return response.data;
   },
+
+  // ---- AUDIO OUTPUT & RECORDING ----
+  getAudio: async () => {
+    const response = await sdrApi.get('/audio');
+    return response.data;
+  },
+
+  patchAudioOutput: async (parameters: any) => {
+    // Expected structure: {"copyToUDP": 0, "index": 0, "name": "...", "recordToFile": 1, ...}
+    const response = await sdrApi.patch('/audio/output/parameters', parameters);
+    return response.data;
+  }
 };
