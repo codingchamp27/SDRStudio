@@ -70,10 +70,13 @@ function parseFrame(data: ArrayBuffer): Float32Array | null {
   } catch { return null; }
 }
 
+// Global lock to prevent SDRangel from crashing when multiple WebSockets are requested
+let activeWsIndex = -1;
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 export function useSpectrumData({
   binsRef, onDataSource,
-  deviceSetIndex, hasDevice, isApiConnected,
+  deviceSetIndex, hasDevice, isRunning, isApiConnected,
   wsPort = 8887,
 }: UseSpectrumDataOptions) {
   const wsRef   = useRef<WebSocket | null>(null);
@@ -105,28 +108,45 @@ export function useSpectrumData({
     let cancelled = false;
 
     if (!isApiConnected) {
-      // API is unreachable → dim the mock and show OFFLINE
+      if (activeWsIndex === deviceSetIndex) activeWsIndex = -1;
       startMock(false, 'OFFLINE');
       return () => { cancelled = true; stopAll(); };
     }
 
     if (!hasDevice) {
-      // API connected but no device set initialized — show DEMO with idle signals
+      if (activeWsIndex === deviceSetIndex) activeWsIndex = -1;
       startMock(true, 'DEMO');
       return () => { cancelled = true; stopAll(); };
     }
 
-    // A device exists — try WS live spectrum, fall back to DEMO mock
-    const init = async () => {
-      // SDRangel natively hardcodes port 8887 per process singleton despite the API keys. 
-      // Force shutdown any active zombie spectrum stream on the opposing workspace first to free the socket.
-      try { 
-         await SdrService.setSpectrumServer(deviceSetIndex === 0 ? 1 : 0, false, wsPort); 
-         await new Promise(r => setTimeout(r, 200));
-      } catch {}
+    if (!isRunning) {
+      if (activeWsIndex === deviceSetIndex) activeWsIndex = -1;
+      startMock(true, 'DEMO');
+      return () => { cancelled = true; stopAll(); };
+    }
 
-      // Try to enable WS server (best-effort)
-      try { await SdrService.setSpectrumServer(deviceSetIndex, true, wsPort); } catch {}
+    // SDRangel natively crashes if you attempt to launch WSSpectrum on multiple devices simultaneously.
+    // We enforce a strict frontend lock: only one device can bind to the WS server at any given time.
+    if (activeWsIndex !== -1 && activeWsIndex !== deviceSetIndex) {
+      startMock(true, 'DEMO'); // Safely fall back to mock
+      return () => { cancelled = true; stopAll(); };
+    }
+
+    // Claim the spectrum server lock
+    activeWsIndex = deviceSetIndex;
+
+    const init = async () => {
+      // Do not manually call setSpectrumServer via the REST API.
+      // SDRangel's WSSpectrum endpoint is extremely unstable and crashes with a Segfault 
+      // when you try to dynamically open/configure it via REST while the device is booting up.
+      // We rely on SDRangel implicitly creating the spectrum pipeline on port 8887,
+      // and we just passively try to attach a WebSocket to it!
+
+      if (cancelled) return;
+
+      // Wait 1.5 seconds before connecting to avoid SDRangel thread-safety Segfaults 
+      // on concurrent WebSocket attach during DSP startup.
+      await new Promise(r => setTimeout(r, 1500));
       if (cancelled) return;
 
       let retries = 6;
@@ -185,11 +205,7 @@ export function useSpectrumData({
     return () => { 
       cancelled = true; 
       stopAll(); 
-      if (hasDevice && isApiConnected) {
-        // Gracefully shutdown the server on the backend to avoid SDRangel segfaults
-        SdrService.setSpectrumServer(deviceSetIndex, false, wsPort).catch(() => {});
-      }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deviceSetIndex, hasDevice, isApiConnected, wsPort]);
+  }, [deviceSetIndex, hasDevice, isRunning, isApiConnected, wsPort]);
 }

@@ -65,6 +65,7 @@ interface DeviceSet {
     serial?: string;
     sequence?: number;
     deviceStreamIndex?: number;
+    devSampleRate?: number;
   };
 }
 
@@ -77,9 +78,7 @@ function TopNavbar({ isConnected, onOpenPresets, onToggleFeatures, featuresOpen,
   audioOutDevices: any[];
 }) {
   const { toast } = useToast();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [deviceSelection, setDeviceSelection] = useState<{ direction: 0 | 1 } | null>(null);
-  const [uploadStatus, setUploadStatus] = useState<{name: string, status: 'uploading' | 'done'} | null>(null);
 
   const activeAudio = audioOutDevices.find(d => d.isSystemDefault === 1) || audioOutDevices[0];
 
@@ -93,43 +92,6 @@ function TopNavbar({ isConnected, onOpenPresets, onToggleFeatures, featuresOpen,
     } catch {
       toast('Failed to change audio output device', 'error');
     }
-  };
-
-  const handleUploadClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploadStatus({ name: file.name, status: 'uploading' });
-    toast(`Uploading ${file.name}...`, 'info');
-    
-    try {
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        headers: {
-          'x-file-name': file.name,
-          'Content-Type': 'application/octet-stream'
-        },
-        body: file
-      });
-      
-      if (!response.ok) throw new Error('Upload failed');
-      const data = await response.json();
-      
-      // Copy to clipboard
-      await navigator.clipboard.writeText(data.path);
-      toast(`Successfully uploaded! Absolute path copied to clipboard: ${data.path}`, 'success');
-      setUploadStatus({ name: file.name, status: 'done' });
-    } catch {
-      toast('Failed to upload file to backend server.', 'error');
-      setUploadStatus(null);
-    }
-    
-    // Clear input
-    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleConfirmSamplingDevice = async (hwDevice: any) => {
@@ -197,27 +159,6 @@ function TopNavbar({ isConnected, onOpenPresets, onToggleFeatures, featuresOpen,
           ))}
           {audioOutDevices.length === 0 && <option disabled value="-1">No Devices</option>}
         </select>
-        
-        <input 
-          type="file" 
-          ref={fileInputRef} 
-          style={{ display: 'none' }} 
-          accept=".raw,.wav,.sdriq,.ts,.mp4,.mpg,.mpeg,.mkv,.avi"
-          onChange={handleFileChange} 
-        />
-        <button 
-          className="sdr-btn" 
-          title="Upload media to backend for transmission in FileSource/ATVMod"
-          onClick={handleUploadClick}
-        >
-          📤 Upload Media
-        </button>
-        {uploadStatus && (
-          <span style={{ fontSize: '11px', color: uploadStatus.status === 'uploading' ? '#ffeb3b' : '#2ed573' }}>
-            {uploadStatus.status === 'uploading' ? 'Uploading: ' : 'Uploaded: '}
-            {uploadStatus.name.length > 20 ? uploadStatus.name.substring(0, 20) + '...' : uploadStatus.name}
-          </span>
-        )}
       </div>
 
       <div style={{ flex: 1 }}></div>
@@ -715,6 +656,99 @@ function ChannelWorkspaceCard({ dsIdx, cIdx, channel }: { dsIdx: number, cIdx: n
   const { toast } = useToast();
   const [squelch, setSquelch] = useState<number>(-50);
   const [gain, setGain] = useState<number>(2);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadStatus, setUploadStatus] = useState<{name: string, path: string, status: 'uploading' | 'done'} | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isLooping, setIsLooping] = useState(false);
+
+  // Detect plugin type from channelType
+  const channelId: string = channel.id || channel.channelType || '';
+  const isTx = channel.direction === 1;
+  const isDatv = channelId.includes('DATVMod');
+  const isAtv  = channelId.includes('ATVMod');
+  const supportsUpload = isTx && (isDatv || isAtv || channelId.includes('FileSource'));
+  const isDatvDemod = !isTx && (
+    channelId.includes('DATVDemod') || channelId.includes('ATVDemod')
+  );
+
+  // ── SDRangel field names differ between DATVMod and ATVMod ───────────────────
+  const fileNameField  = isDatv ? 'tsFileName'    : 'videoFileName';
+  const playField      = isDatv ? 'tsFilePlay'    : 'videoPlay';
+  const loopField      = isDatv ? 'tsFilePlayLoop' : 'videoPlayLoop';
+  const srcField       = isDatv ? 'tsSource'      : 'atvModInput'; // 0 = File (DATV), 2 = Video (ATV)
+  const srcVal         = isDatv ? 0 : 2;
+
+  const handleUploadClick = () => fileInputRef.current?.click();
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadStatus({ name: file.name, path: '', status: 'uploading' });
+    toast(`Uploading ${file.name}...`, 'info');
+    try {
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { 'x-file-name': file.name, 'Content-Type': 'application/octet-stream' },
+        body: file
+      });
+      if (!response.ok) throw new Error('Upload failed');
+      const data = await response.json();
+      const savedPath: string = data.path;
+      setUploadStatus({ name: file.name, path: savedPath, status: 'done' });
+
+      // ── Immediately tell SDRangel which file to use ───────────────────────────
+      try {
+        const current = await SdrService.getChannelSettings(dsIdx, cIdx);
+        const key = Object.keys(current).find(k => k.endsWith('Settings'));
+        if (key) {
+          await SdrService.patchChannelSettings(dsIdx, cIdx, {
+            channelType: current.channelType,
+            direction: current.direction,
+            [key]: { ...current[key], [fileNameField]: savedPath, [srcField]: srcVal },
+          });
+          toast(`File set: ${savedPath}`, 'success');
+        } else {
+          toast(`Uploaded. Manually set path: ${savedPath}`, 'info');
+        }
+      } catch {
+        toast(`Uploaded to ${savedPath} — could not auto-set in SDRangel`, 'warning');
+      }
+    } catch {
+      toast('Failed to upload file to backend server.', 'error');
+      setUploadStatus(null);
+    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handlePlayToggle = async () => {
+    const next = !isPlaying;
+    setIsPlaying(next);
+    try {
+      const current = await SdrService.getChannelSettings(dsIdx, cIdx);
+      const key = Object.keys(current).find(k => k.endsWith('Settings'));
+      if (!key) throw new Error('No settings key');
+      await SdrService.patchChannelSettings(dsIdx, cIdx, {
+        channelType: current.channelType,
+        direction: current.direction,
+        [key]: { ...current[key], [playField]: next ? 1 : 0, [srcField]: srcVal },
+      });
+    } catch { toast('Failed to toggle play state', 'error'); setIsPlaying(!next); }
+  };
+
+  const handleLoopToggle = async () => {
+    const next = !isLooping;
+    setIsLooping(next);
+    try {
+      const current = await SdrService.getChannelSettings(dsIdx, cIdx);
+      const key = Object.keys(current).find(k => k.endsWith('Settings'));
+      if (!key) throw new Error('No settings key');
+      await SdrService.patchChannelSettings(dsIdx, cIdx, {
+        channelType: current.channelType,
+        direction: current.direction,
+        [key]: { ...current[key], [loopField]: next ? 1 : 0, [srcField]: srcVal },
+      });
+    } catch { toast('Failed to toggle loop state', 'error'); setIsLooping(!next); }
+  };
 
   const handleClose = async () => {
     try {
@@ -727,11 +761,9 @@ function ChannelWorkspaceCard({ dsIdx, cIdx, channel }: { dsIdx: number, cIdx: n
 
   const patchChannelSetting = async (field: string, value: number) => {
     try {
-      // SDRangel requires settings wrapped in channelType key.
-      // Fetch current settings → find the wrapper key (e.g. "WFMDemodSettings") → merge → PATCH
       const current = await SdrService.getChannelSettings(dsIdx, cIdx);
       const settingsKey = Object.keys(current).find(k => k.endsWith('Settings'));
-      if (!settingsKey) throw new Error('No settings key found in channel response');
+      if (!settingsKey) throw new Error('No settings key found');
       const merged = {
         channelType: current.channelType,
         direction: current.direction,
@@ -748,31 +780,19 @@ function ChannelWorkspaceCard({ dsIdx, cIdx, channel }: { dsIdx: number, cIdx: n
   const [settingsKey, setSettingsKey] = useState<string>('');
 
   const toggleExpand = async () => {
-    if (isExpanded) {
-      setIsExpanded(false);
-      return;
-    }
+    if (isExpanded) { setIsExpanded(false); return; }
     try {
       const current = await SdrService.getChannelSettings(dsIdx, cIdx);
       const key = Object.keys(current).find(k => k.endsWith('Settings'));
-      if (key && current[key]) {
-        setSettingsKey(key);
-        setFullSettings(current[key]);
-        setIsExpanded(true);
-      } else {
-        toast("No expanded settings available for this plugin", "info");
-      }
-    } catch {
-      toast("Failed to load channel plugin settings", "error");
-    }
+      if (key && current[key]) { setSettingsKey(key); setFullSettings(current[key]); setIsExpanded(true); }
+      else toast("No expanded settings available for this plugin", "info");
+    } catch { toast("Failed to load channel plugin settings", "error"); }
   };
 
   const handleDynamicChange = async (field: string, value: any) => {
     if (!settingsKey || !fullSettings) return;
     try {
-      // Optimistic update
       setFullSettings((prev: any) => ({ ...prev, [field]: value }));
-      
       const current = await SdrService.getChannelSettings(dsIdx, cIdx);
       const merged = {
         channelType: current.channelType,
@@ -780,16 +800,10 @@ function ChannelWorkspaceCard({ dsIdx, cIdx, channel }: { dsIdx: number, cIdx: n
         [settingsKey]: { ...current[settingsKey], [field]: value },
       };
       await SdrService.patchChannelSettings(dsIdx, cIdx, merged);
-    } catch (e: any) {
-      toast(`Failed to update ${field}: ${e?.message ?? 'API error'}`, 'error');
-    }
+    } catch (e: any) { toast(`Failed to update ${field}: ${e?.message ?? 'API error'}`, 'error'); }
   };
 
-  const openHelp = () => {
-    window.open(`https://github.com/f4exb/sdrangel/wiki/${channel.id}`, '_blank');
-  };
-
-  const isTx = channel.direction === 1;
+  const openHelp = () => window.open(`https://github.com/f4exb/sdrangel/wiki/${channel.id}`, '_blank');
 
   return (
     <div className="channel-card">
@@ -799,13 +813,12 @@ function ChannelWorkspaceCard({ dsIdx, cIdx, channel }: { dsIdx: number, cIdx: n
           <span style={{ color: '#eee' }}>{channel.title}</span>
         </span>
         <div className="navbar-group">
-          <button className="sdr-btn" title="Toggle Plugin Settings" onClick={toggleExpand}>
-            {isExpanded ? '▲' : '▼'}
-          </button>
-          <button className="sdr-btn" title="Channel Settings (opens docs)" onClick={openHelp}>❔</button>
+          <button className="sdr-btn" title="Toggle Plugin Settings" onClick={toggleExpand}>{isExpanded ? '▲' : '▼'}</button>
+          <button className="sdr-btn" title="Open plugin docs" onClick={openHelp}>❔</button>
           <button className="sdr-btn" title="Close" onClick={handleClose}>✖</button>
         </div>
       </div>
+
       <div className="channel-body">
         <div className="freq-display-box" style={{ padding: '4px' }}>
           <span style={{ fontSize: '11px', color: '#aaa', alignSelf: 'center' }}>Δf Offset (Hz)</span>
@@ -830,6 +843,128 @@ function ChannelWorkspaceCard({ dsIdx, cIdx, channel }: { dsIdx: number, cIdx: n
             onChange={e => setGain(Number(e.target.value))}
             onMouseUp={() => patchChannelSetting(isTx ? 'inputVolumeFactor' : 'volume', gain)} />
         </div>
+
+        {/* ── Upload Media + Playback Controls (DATVMod / ATVMod) ── */}
+        {supportsUpload && (
+          <div style={{ borderTop: '1px solid var(--border-color)', padding: '6px 6px 4px' }}>
+            {/* Row 1: file picker */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '5px' }}>
+              <input type="file" ref={fileInputRef} style={{ display: 'none' }}
+                accept=".raw,.wav,.sdriq,.ts,.mp4,.mpg,.mpeg,.mkv,.avi"
+                onChange={handleFileChange} />
+              <button
+                title="Select & upload media file"
+                onClick={handleUploadClick}
+                style={{
+                  background: 'rgba(40,40,60,0.8)', border: '1px solid #444', color: '#ccc',
+                  borderRadius: '4px', padding: '3px 8px', fontSize: '16px', cursor: 'pointer',
+                  lineHeight: 1, display: 'flex', alignItems: 'center', gap: '4px'
+                }}>
+                🎞
+              </button>
+              <span style={{
+                flex: 1, fontSize: '10px', color: uploadStatus ? (uploadStatus.status === 'uploading' ? '#ffeb3b' : '#2ed573') : '#555',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {uploadStatus
+                  ? (uploadStatus.status === 'uploading' ? '⏳ uploading…' : uploadStatus.name)
+                  : '…'}
+              </span>
+            </div>
+
+            {/* Row 2: Play + Loop, matching SDRangel's native button strip */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              {/* Play / Pause */}
+              <button
+                title={isPlaying ? 'Pause' : 'Play'}
+                onClick={handlePlayToggle}
+                disabled={!uploadStatus || uploadStatus.status === 'uploading'}
+                style={{
+                  background: isPlaying ? 'rgba(46,213,115,0.25)' : 'rgba(40,40,60,0.8)',
+                  border: `1px solid ${isPlaying ? '#2ed573' : '#444'}`,
+                  color: isPlaying ? '#2ed573' : '#aaa',
+                  borderRadius: '4px', padding: '3px 10px', fontSize: '14px', cursor: 'pointer',
+                  opacity: (!uploadStatus || uploadStatus.status === 'uploading') ? 0.4 : 1,
+                }}>
+                {isPlaying ? '⏸' : '▶'}
+              </button>
+
+              {/* Loop */}
+              <button
+                title={isLooping ? 'Disable loop' : 'Enable loop'}
+                onClick={handleLoopToggle}
+                disabled={!uploadStatus || uploadStatus.status === 'uploading'}
+                style={{
+                  background: isLooping ? 'rgba(52,152,219,0.25)' : 'rgba(40,40,60,0.8)',
+                  border: `1px solid ${isLooping ? '#3498db' : '#444'}`,
+                  color: isLooping ? '#3498db' : '#aaa',
+                  borderRadius: '4px', padding: '3px 10px', fontSize: '14px', cursor: 'pointer',
+                  opacity: (!uploadStatus || uploadStatus.status === 'uploading') ? 0.4 : 1,
+                }}>
+                🔁
+              </button>
+
+              {/* Tiny file path hint */}
+              {uploadStatus?.status === 'done' && (
+                <span
+                  title={uploadStatus.path}
+                  style={{ fontSize: '9px', color: '#555', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                  {uploadStatus.path}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── DATV / ATV Demodulator output panel ────────────────── */}
+        {isDatvDemod && (
+          <div style={{ borderTop: '1px solid var(--border-color)', padding: '6px 4px' }}>
+            {/* Received video area */}
+            <div style={{
+              background: '#000', borderRadius: '4px', width: '100%', height: '110px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              border: '1px solid #2a2a3a', marginBottom: '6px', position: 'relative',
+            }}>
+              <span style={{ fontSize: '10px', color: '#444' }}>📡 Waiting for DVB-S stream…</span>
+              <div style={{ position: 'absolute', bottom: 4, right: 6, fontSize: '9px', color: '#555', display: 'flex', gap: '10px' }}>
+                <span>MER –</span><span>CNR –</span><span>0 kb/s</span>
+              </div>
+            </div>
+            {/* Constellation */}
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontSize: '9px', color: '#666', marginBottom: '3px' }}>Constellation</div>
+                <canvas width={80} height={80}
+                  style={{ background: '#080810', borderRadius: '4px', border: '1px solid #2a2a3a', display: 'block' }}
+                  ref={canvas => {
+                    if (!canvas) return;
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) return;
+                    ctx.clearRect(0, 0, 80, 80);
+                    // Draw axes
+                    ctx.strokeStyle = '#1a1a2a'; ctx.lineWidth = 1;
+                    ctx.beginPath(); ctx.moveTo(40, 0); ctx.lineTo(40, 80); ctx.moveTo(0, 40); ctx.lineTo(80, 40); ctx.stroke();
+                    // QPSK placeholder dots
+                    ctx.fillStyle = '#2ed573';
+                    [[20,20],[60,20],[20,60],[60,60]].forEach(([cx,cy]) => {
+                      for (let i = 0; i < 14; i++) {
+                        ctx.beginPath();
+                        ctx.arc(cx + (Math.random()-0.5)*7, cy + (Math.random()-0.5)*7, 1.2, 0, Math.PI*2);
+                        ctx.fill();
+                      }
+                    });
+                  }}
+                />
+              </div>
+              <div style={{ fontSize: '9px', color: '#555', lineHeight: 2 }}>
+                <div>Mode: QPSK</div>
+                <div>Std: DVB-S</div>
+                <div>FEC: 1/2</div>
+                <div>SR: –</div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="spectrum-toolbar" style={{ borderTop: '1px solid var(--border-color)', marginTop: 'auto', padding: '4px' }}>
@@ -844,6 +979,7 @@ function ChannelWorkspaceCard({ dsIdx, cIdx, channel }: { dsIdx: number, cIdx: n
     </div>
   );
 }
+
 
 
 function DeviceSidebarCard({ idx, ds, deviceSetCount, onAddChannel }: { idx: number, ds: DeviceSet, deviceSetCount: number, onAddChannel: () => void }) {
@@ -1055,6 +1191,155 @@ function DeviceSidebarCard({ idx, ds, deviceSetCount, onAddChannel }: { idx: num
           )}
         </div>
       )}
+
+      {/* ── Per-device inline spectrum ───────────────────────── */}
+      <DeviceSpectrum idx={idx} ds={ds} />
+
+      {/* ── Channel cards for this device ───────────────────── */}
+      {(ds.channels || []).map((ch: any, cIdx: number) => (
+        <ChannelWorkspaceCard key={`${idx}-${cIdx}`} dsIdx={idx} cIdx={cIdx} channel={ch} />
+      ))}
+    </div>
+  );
+}
+
+/** Compact live spectrum embedded per device */
+function DeviceSpectrum({ idx, ds }: { idx: number, ds: DeviceSet }) {
+  const binsRef = useRef<Float32Array | null>(null);
+  const [dataSource, setDataSource] = useState<DataSource>('DEMO');
+  const specRef = useRef<HTMLCanvasElement>(null);
+  const wfRef = useRef<HTMLCanvasElement>(null);
+
+  const hw = ds.samplingDevice;
+  const hasDevice = !!hw;
+  const freqMhz = hw?.centerFrequency ? (hw.centerFrequency / 1e6).toFixed(3) : '?';
+  const srMhz = hw?.devSampleRate ? (hw.devSampleRate / 1e6).toFixed(3) : '?';
+
+  useSpectrumData({
+    binsRef,
+    onDataSource: setDataSource,
+    deviceSetIndex: idx,
+    hasDevice,
+    isRunning: hw?.state === 1 || hw?.state === 'running',
+    isApiConnected: true,
+    wsPort: 8887,
+  });
+
+  useEffect(() => {
+    const sCanvas = specRef.current;
+    const wCanvas = wfRef.current;
+    if (!sCanvas || !wCanvas) return;
+
+    const sCtx = sCanvas.getContext('2d');
+    const wCtx = wCanvas.getContext('2d', { willReadFrequently: true });
+    if (!sCtx || !wCtx) return;
+
+    const W = sCanvas.width;
+    const SH = sCanvas.height;
+    const WH = wCanvas.height;
+
+    // Helper to map dB value to RGB color for waterfall
+    const dbToWaterFall = (db: number) => {
+      // mapping roughly -120 to 0 dB to colors: Black -> Blue -> Green -> Yellow -> Red
+      const mapped = Math.max(0, Math.min(1, (db + 110) / 100)); // normalized 0..1
+      const r = mapped < 0.5 ? 0 : mapped < 0.75 ? (mapped - 0.5) * 4 * 255 : 255;
+      const g = mapped < 0.25 ? 0 : mapped < 0.5 ? (mapped - 0.25) * 4 * 255 : mapped < 0.75 ? 255 : 255 - (mapped - 0.75) * 4 * 128;
+      const b = mapped < 0.25 ? mapped * 4 * 255 : mapped < 0.5 ? 255 - (mapped - 0.25) * 4 * 255 : 0;
+      return [r, g, b, 255];
+    };
+
+    const wfImageData = wCtx.createImageData(W, 1);
+    let raf: number;
+
+    const draw = () => {
+      const bins = binsRef.current;
+      
+      // 1. Draw Top Spectrum
+      sCtx.clearRect(0, 0, W, SH);
+      
+      // Background and grid
+      sCtx.fillStyle = '#050508'; // Very dark
+      sCtx.fillRect(0, 0, W, SH);
+      
+      sCtx.strokeStyle = 'rgba(255,255,255,0.05)';
+      sCtx.lineWidth = 1;
+      sCtx.beginPath();
+      for (let x = W/2 % 40; x < W; x += 40) { sCtx.moveTo(x, 0); sCtx.lineTo(x, SH); }
+      for (let y = 20; y < SH; y += 20) { sCtx.moveTo(0, y); sCtx.lineTo(W, y); }
+      sCtx.stroke();
+
+      // Top label text
+      sCtx.fillStyle = '#ccc';
+      sCtx.font = '10px monospace';
+      sCtx.fillText(`CF:${freqMhz}M SP:${srMhz}M`, 5, 12);
+      sCtx.fillText('0', 5, 25);
+      sCtx.fillText('-100', 5, SH - 10);
+
+      // Purple baseline
+      sCtx.fillStyle = '#8e44ad';
+      sCtx.fillRect(0, SH - 6, W, 6);
+
+      if (bins && bins.length > 0) {
+        const n = bins.length;
+        const step = n / W;
+
+        sCtx.beginPath();
+        sCtx.strokeStyle = '#f1c40f'; // Solid yellow trace
+        sCtx.fillStyle = 'rgba(241, 196, 15, 0.2)'; // Yellow fill under trace
+        sCtx.lineWidth = 1.0;
+        
+        // Start from bottom left for the fill
+        sCtx.moveTo(0, SH - 6);
+        
+        // Populate exactly W pixels wide
+        for (let px = 0; px < W; px++) {
+          const b = Math.min(Math.floor(px * step), n - 1);
+          const db = bins[b];
+          const y = Math.max(0, Math.min(SH - 6, (SH - 6) * (1 - (db + 110) / 110)));
+          
+          sCtx.lineTo(px, y);
+          
+          // Color for the waterfall row
+          const color = dbToWaterFall(db);
+          const idx = px * 4;
+          wfImageData.data[idx]   = color[0];
+          wfImageData.data[idx+1] = color[1];
+          wfImageData.data[idx+2] = color[2];
+          wfImageData.data[idx+3] = 255;
+        }
+
+        // Close path for fill
+        sCtx.lineTo(W, SH - 6);
+        sCtx.closePath();
+        sCtx.fill();
+        sCtx.stroke();
+
+        // 2. Draw Waterfall
+        // Shift old image down by 1 pixel
+        const oldWf = wCtx.getImageData(0, 0, W, WH - 1);
+        wCtx.putImageData(oldWf, 0, 1);
+        // Draw the new row at the top
+        wCtx.putImageData(wfImageData, 0, 0);
+      }
+
+      raf = requestAnimationFrame(draw);
+    };
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [freqMhz, srMhz]);
+
+  const badgeColor = dataSource === 'LIVE' ? '#2ed573' : dataSource === 'DEMO' ? '#f39c12' : '#ff4757';
+
+  return (
+    <div style={{ borderTop: '1px solid var(--border-color)', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ position: 'absolute', top: 3, right: 4, zIndex: 5, display: 'flex', gap: '5px', alignItems: 'center', pointerEvents: 'none' }}>
+        <span style={{ fontSize: '10px', background: 'rgba(0,0,0,0.8)', padding: '2px 4px', borderRadius: '3px', color: badgeColor, border: `1px solid ${badgeColor}` }}>
+          {dataSource}
+        </span>
+      </div>
+      <canvas ref={specRef} width={800} height={90} style={{ width: '100%', height: '90px', display: 'block' }} />
+      <canvas ref={wfRef} width={800} height={100} style={{ width: '100%', height: '100px', display: 'block', borderTop: '1px solid #111' }} />
     </div>
   );
 }
@@ -1296,173 +1581,26 @@ function SpectrumVisualizer({
 
 
 function MainWorkspace({ deviceSets, isConnected }: { deviceSets: DeviceSet[], isConnected: boolean }) {
-  const { toast } = useToast();
-
-  const [gridMode, setGridMode] = useState(true);
-  const [showWaterfall, setShowWaterfall] = useState(true);
-  const [maxHold, setMaxHold] = useState(false);
-  const [phosphorMode, setPhosphorMode] = useState(false);
-  const [avgMode, setAvgMode] = useState(false);
-  const [colorMap, setColorMap] = useState('Angel');
-  const [dbRange, setDbRange] = useState(100);
-  const [refLevel, setRefLevel] = useState(0);
-  const [spectrumMode, setSpectrumMode] = useState<'line' | 'histogram'>('line');
-
-  const mainRx = deviceSets.find(d => d.samplingDevice?.direction === 0);
-  const mainRxIdx = deviceSets.findIndex(d => d.samplingDevice?.direction === 0);
-  const isRxRunning = mainRx?.samplingDevice?.state === 1 || mainRx?.samplingDevice?.state === 'running';
-  const freqMhz = mainRx?.samplingDevice?.centerFrequency
-    ? (mainRx.samplingDevice.centerFrequency / 1000000).toFixed(3)
-    : '435.000';
-
-  // ── Phase 7: ref-based spectrum data (zero re-render on frame) ──────────
-  const binsRef = useRef<Float32Array | null>(null);
-  const [dataSource, setDataSource] = useState<DataSource>('DEMO');
-  const hasDevice = mainRxIdx >= 0;
-
-  useSpectrumData({
-    binsRef,
-    onDataSource: setDataSource,
-    deviceSetIndex: hasDevice ? mainRxIdx : 0,
-    hasDevice,
-    isRunning: isRxRunning,
-    isApiConnected: isConnected,
-    wsPort: 8887,
-  });
-
-  const handleAutoScale = () => {
-    if (!binsRef.current) {
-      setDbRange(100);
-      setRefLevel(0);
-      return;
-    }
-    const bins = binsRef.current;
-    let maxBin = -1000, sum = 0;
-    for (let i = 0; i < bins.length; i++) {
-       if (bins[i] > maxBin) maxBin = bins[i];
-       sum += bins[i];
-    }
-    const avg = sum / bins.length;
-    // Set refLevel slightly above the max peak (+5 dB)
-    const newRef = Math.ceil((maxBin + 5) / 10) * 10;
-    // Set dbRange so the noise floor is near the bottom (-15 dB below avg)
-    const newFloor = Math.floor((avg - 15) / 10) * 10;
-    const newRange = Math.max(40, newRef - newFloor);
-    
-    setRefLevel(newRef);
-    setDbRange(newRange);
-    toast(`Auto-scaled: Ref ${newRef}dB, Range ${newRange}dB`, 'success');
-  };
-
-  const handleSaveImage = () => {
-    const canvas = document.getElementById('spectrum-plot') as HTMLCanvasElement;
-    if (!canvas) return toast('Spectrum canvas not found', 'error');
-    
-    const link = document.createElement('a');
-    link.download = `sdr_spectrum_snapshot_${Date.now()}.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
-    toast('Spectrum image saved to Downloads', 'success');
-  };
-
-  // Flatten all channels from all deviceSets into one array to render them globally dynamically
-  const allChannels = deviceSets.flatMap((ds, dsIdx) =>
-    (ds.channels || []).map((ch, cIdx) => ({ dsIdx, cIdx, channel: ch }))
-  );
-
+  if (!isConnected) {
+    return (
+      <div className="workspace-area" style={{ alignItems: 'center', justifyContent: 'center', color: '#555', fontSize: '13px' }}>
+        <p>🔴 SDRangel backend is offline. Start sdrsrv or SDRangel with the API enabled on port 8091.</p>
+      </div>
+    );
+  }
+  if (deviceSets.length === 0) {
+    return (
+      <div className="workspace-area" style={{ alignItems: 'center', justifyContent: 'center', color: '#555', flexDirection: 'column', gap: '8px' }}>
+        <p style={{ fontSize: '15px' }}>No devices active.</p>
+        <p style={{ fontSize: '12px' }}>Use <strong>+ Rx</strong> or <strong>+ Tx</strong> in the top bar to add a workspace.<br/>Each device will show its own spectrum inline.</p>
+      </div>
+    );
+  }
   return (
-    <div className="workspace-area">
-      <div className="spectrum-panel" style={{ flex: '1 1 60%' }}>
-        <div className="spectrum-header">
-          <div className="navbar-group">
-            <span className="rx-badge">M:0</span>
-            <span style={{ color: '#ddd', fontSize: '12px', marginLeft: '8px', fontWeight: 600 }}>
-              Spectrum {spectrumMode === 'histogram' ? '[Histogram]' : ''}
-            </span>
-          </div>
-          <div className="navbar-group">
-            <button className="sdr-btn" title="Open SDRangel spectrum docs"
-              onClick={() => window.open('https://github.com/f4exb/sdrangel/wiki/Spectrum-display', '_blank')}>❔</button>
-            <button className="sdr-btn" title="Shrink spectrum height"
-              onClick={() => toast('Resize handled by browser — drag the panel divider', 'info')}>↙</button>
-            <button className="sdr-btn" title="Expand spectrum height"
-              onClick={() => toast('Resize handled by browser — drag the panel divider', 'info')}>⤢</button>
-            <button className="sdr-btn" title="Hide/Show Waterfall"
-              style={{ background: showWaterfall ? 'transparent' : '#333' }}
-              onClick={() => setShowWaterfall(v => !v)}>⊘</button>
-          </div>
-        </div>
-
-        <SpectrumVisualizer
-          freqMhz={freqMhz}
-          isConnected={deviceSets.length > 0}
-          gridMode={gridMode}
-          maxHold={maxHold}
-          colorMap={colorMap}
-          dbRange={dbRange}
-          refLevel={refLevel}
-          showWaterfall={showWaterfall}
-          phosphorMode={phosphorMode}
-          avgMode={avgMode}
-          spectrumMode={spectrumMode}
-          binsRef={binsRef}
-          dataSource={dataSource}
-        />
-
-        <div className="spectrum-toolbar">
-          {/* Grid */}
-          <button className="sdr-btn" title="Toggle grid" style={{ background: gridMode ? '#444' : 'transparent' }} onClick={() => setGridMode(!gridMode)}>▦</button>
-          {/* Waterfall */}
-          <button className="sdr-btn" title="Toggle waterfall" style={{ background: showWaterfall ? '#444' : 'transparent' }} onClick={() => setShowWaterfall(v => !v)}>◓</button>
-          {/* Phosphor decay */}
-          <button className="sdr-btn" title="Phosphor (decay) mode" style={{ color: phosphorMode ? '#7bed9f' : '#aaa', background: phosphorMode ? 'rgba(123,237,159,0.15)' : 'transparent' }} onClick={() => setPhosphorMode(v => !v)}>⚡</button>
-          {/* Max hold */}
-          <button className="sdr-btn" title="Max hold" style={{ color: '#f44', background: maxHold ? '#522' : 'transparent' }} onClick={() => setMaxHold(!maxHold)}>📈</button>
-          {/* Average toggle */}
-          <button className="sdr-btn" title="Average mode" style={{ color: avgMode ? '#fff' : '#777', background: avgMode ? '#333' : 'transparent' }} onClick={() => setAvgMode(v => !v)}>↑</button>
-          {/* Spectrum mode */}
-          <button className="sdr-btn" title="Spectrum display mode (line/histogram)"
-            style={{ color: '#fa0', background: spectrumMode === 'histogram' ? 'rgba(255,165,0,0.2)' : 'transparent' }}
-            onClick={() => setSpectrumMode(m => m === 'line' ? 'histogram' : 'line')}>◬</button>
-
-          <div className="toolbar-knob">
-            <select value={colorMap} onChange={e => setColorMap(e.target.value)}>
-              <option value="Angel">Angel</option>
-              <option value="Ice">Ice</option>
-            </select>
-          </div>
-
-          <div className="toolbar-knob">
-            <label>FFT</label>
-            <select><option>1k</option><option>2k</option><option>4k</option><option>8k</option></select>
-          </div>
-
-          {/* Auto-scale */}
-          <button className="sdr-btn" title="Auto-scale (reset dB range)" onClick={handleAutoScale}>A</button>
-
-          <div className="toolbar-knob" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{ fontSize: '9px', color: '#666' }}>↕ DB</span>
-            <input type="number" value={refLevel} onChange={e => setRefLevel(Number(e.target.value))} style={{ width: '35px', background: 'transparent', border: 'none', color: '#fff', fontSize: '11px' }} />
-          </div>
-          <div className="toolbar-knob" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{ fontSize: '9px', color: '#666' }}>⤢ DB</span>
-            <input type="number" value={dbRange} onChange={e => setDbRange(Number(e.target.value))} style={{ width: '35px', background: 'transparent', border: 'none', color: '#fff', fontSize: '11px' }} />
-          </div>
-          <div className="toolbar-knob">
-            <input type="number" style={{ width: '30px', background: 'transparent', border: 'none', color: '#fff', fontSize: '11px' }} defaultValue="20" title="Waterfall depth (ms/row)" />
-          </div>
-
-          <button className="sdr-btn" title="Save spectrum snapshot" onClick={handleSaveImage}>💾</button>
-          <button className="sdr-btn" title="Spectrum settings" onClick={() => window.open('https://github.com/f4exb/sdrangel/wiki/Spectrum-display', '_blank')}>🔧</button>
-        </div>
-      </div>
-
-      {/* Plugin Grid - Render all attached channels */}
-      <div style={{ flex: '0 1 320px', display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto' }}>
-        {allChannels.map(({ dsIdx, cIdx, channel }) => (
-          <ChannelWorkspaceCard key={`${dsIdx}-${cIdx}`} dsIdx={dsIdx} cIdx={cIdx} channel={channel} />
-        ))}
-      </div>
+    <div className="workspace-area" style={{ alignItems: 'flex-start', justifyContent: 'center', padding: '16px' }}>
+      <p style={{ color: '#555', fontSize: '12px' }}>
+        Spectra and channel plugins are displayed in each device card on the left sidebar.
+      </p>
     </div>
   );
 }
@@ -1553,7 +1691,7 @@ function SdrApplication() {
           ))}
         </div>
 
-        {/* CENTER – Main Workspace */}
+        {/* CENTER – Main Workspace (simplified) */}
         <MainWorkspace deviceSets={deviceSets} isConnected={isConnected} />
 
         {/* RIGHT PANEL – Feature Sidebar (togglable) */}
