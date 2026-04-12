@@ -11,7 +11,6 @@
 
 import { useEffect, useRef, type MutableRefObject } from 'react';
 import { SdrService } from './api';
-
 export type DataSource = 'LIVE' | 'DEMO' | 'OFFLINE';
 
 export interface SpectrumFrame {
@@ -70,8 +69,6 @@ function parseFrame(data: ArrayBuffer): Float32Array | null {
   } catch { return null; }
 }
 
-// Global lock to prevent SDRangel from crashing when multiple WebSockets are requested
-let activeWsIndex = -1;
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 export function useSpectrumData({
@@ -108,46 +105,30 @@ export function useSpectrumData({
     let cancelled = false;
 
     if (!isApiConnected) {
-      if (activeWsIndex === deviceSetIndex) activeWsIndex = -1;
       startMock(false, 'OFFLINE');
       return () => { cancelled = true; stopAll(); };
     }
 
     if (!hasDevice) {
-      if (activeWsIndex === deviceSetIndex) activeWsIndex = -1;
       startMock(true, 'DEMO');
       return () => { cancelled = true; stopAll(); };
     }
 
     if (!isRunning) {
-      if (activeWsIndex === deviceSetIndex) activeWsIndex = -1;
       startMock(true, 'DEMO');
       return () => { cancelled = true; stopAll(); };
     }
 
-    // SDRangel natively crashes if you attempt to launch WSSpectrum on multiple devices simultaneously.
-    // We enforce a strict frontend lock: only one device can bind to the WS server at any given time.
-    if (activeWsIndex !== -1 && activeWsIndex !== deviceSetIndex) {
-      startMock(true, 'DEMO'); // Safely fall back to mock
-      return () => { cancelled = true; stopAll(); };
-    }
-
-    // Claim the spectrum server lock
-    activeWsIndex = deviceSetIndex;
-
     const init = async () => {
-      // Do not manually call setSpectrumServer via the REST API.
-      // SDRangel's WSSpectrum endpoint is extremely unstable and crashes with a Segfault 
-      // when you try to dynamically open/configure it via REST while the device is booting up.
-      // We rely on SDRangel implicitly creating the spectrum pipeline on port 8887,
-      // and we just passively try to attach a WebSocket to it!
-
       if (cancelled) return;
 
-      // Wait 1.5 seconds before connecting to avoid SDRangel thread-safety Segfaults 
-      // on concurrent WebSocket attach during DSP startup.
-      await new Promise(r => setTimeout(r, 1500));
-      if (cancelled) return;
+      // Ensure that we explicitly request SDRangel to stand up its WS spectrum server for THIS device context.
+      // We pass the unique `wsPort` mapped in App.tsx (8887 + DS Index) so that multiple devices don't collide and crash the backend!
+      try {
+        await SdrService.setSpectrumServer(deviceSetIndex, true, wsPort);
+      } catch (e) {
+        // Silently continue and attempt to connect regardless
+      }
 
       let retries = 6;
 
