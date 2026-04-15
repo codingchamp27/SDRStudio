@@ -1,0 +1,176 @@
+body {
+  display: block;
+  margin: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #121212;
+  color: #e0e0e0;
+  overflow: hidden;
+}
+/* .title{
+  text-align: center;
+
+} */
+/* .flexContainer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 16px;
+}
+
+.column {
+  flex: 1 1 100%;
+  min-width: 300px;
+  max-width: 100%;
+}
+
+ */
+
+/* 
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+} */
+
+
+/* On medium and larger screens, show 3 columns side by side */
+/* @media (min-width: 768px) {
+  .column {
+    flex: 1 1 calc(33.333% - 16px);
+    max-width: calc(33.333% - 32px);
+  }
+} */
+
+
+.container {
+    display: flex;
+}
+
+.menu {
+    flex: 1;
+    background-color: #0D0C0F;
+    min-height: 100vh;
+}
+
+.content {
+    flex: 5;
+}
+
+.dashboard{
+    height: 92vh;
+    width: 100%;
+    background-image: linear-gradient(#1E294B91, #122343);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.darkBackground {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.urlInputContainer {
+  background-color: #ffffff;
+  border-radius: 12px;
+  padding: 2rem;
+  min-width: 300px;
+  max-width: 90%;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  animation: fadeIn 0.3s ease-in-out;
+  text-align: center;
+}
+
+.urlInputContainer label {
+  font-size: 1.2rem;
+  font-weight: 600;
+  display: block;
+  margin-bottom: 1rem;
+  color: #333;
+}
+
+.urlInputContainer select {
+  width: 100%;
+  padding: 0.6rem;
+  font-size: 1rem;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  background-color: #f9f9f9;
+  outline: none;
+  transition: border-color 0.3s ease;
+}
+
+.urlInputContainer select:focus {
+  border-color: #007bff;
+  background-color: #fff;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.progress{
+    height: 10%;
+    width: 100%;
+    padding: 10px 20px;
+    
+}
+
+.bar{
+    height: 90%;
+    width: 100%;
+    background-color: #0D2B46;
+    border-radius: 11px;
+    padding: 5px 20px;
+    color: white;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.cancel{
+    color: #F36F41;
+    font-size: 30px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+}
+
+.info{
+    height: 90%;
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+}
+
+.core,.ran,.ue,.packet{
+    padding: 10px 20px;
+}
+

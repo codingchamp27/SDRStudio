@@ -1,0 +1,31 @@
+.matrixWrapper {
+  background-color: #101010;
+  padding: 12px;
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+.matrixHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  color: #374151;
+  font-size: 14px;
+}
+.matrixGrid {
+  display: grid;
+  gap: 3px;
+  user-select: none;
+}
+.cell {
+  width: 14px;
+  height: 14px;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.modeLabel{
+    color: aliceblue;
+}

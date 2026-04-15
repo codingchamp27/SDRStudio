@@ -1,0 +1,23 @@
+Go to Desktop and then  TX_v1 folder and open terminal
+
+split three terminl by clicking add symbol in top left corner
+
+in 1st terminal type following command :
+ 1) cd Mantis_RIS_Backend-1.0.0/service
+ 2) python3 sdrangle_start.py
+
+ 
+ in 2nd terminal type following command :
+ 1) cd Mantis_RIS_Backend-1.0.0
+ 2) sudo npm run dev
+ 
+ in 3rd terminal type the following command
+ 
+ 1) cd Mantis_RIS_Reciver-1.0.0
+ 2) npm run dev
+ 
+ 
+ username: a
+ password: a
+ 
+  after GUI is started wait untill all green ticks are seen in task bar then go to configure page

@@ -1,0 +1,17 @@
+.container {
+    display: flex;
+    height: 100vh;
+    width: 100%;
+    background:transparent url('../../../../../resources/backgroundImage/futuristic-colored-luminous-wave-dots-concept-big-data-sound-visualization-network-connection-cybernetics-3d-rendering.png') no-repeat;
+}
+
+.menu {
+    flex: 1;
+    background-color: #010F1EED;
+    min-height: 100vh;
+}
+
+.content {
+    flex: 5;
+    height: 100vh;
+}

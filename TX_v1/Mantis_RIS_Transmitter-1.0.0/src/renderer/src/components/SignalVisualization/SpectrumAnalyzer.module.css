@@ -1,0 +1,15 @@
+.conatiner{
+   /* display: flex;
+   flex-direction: column;
+  justify-content: center;
+  align-items: center; */
+ width: 100%;
+  
+}
+.chartWrapper {
+  /* margin-bottom: 24px; */
+  background-color: transparent;
+  /* border: 1px solid #ddd; */
+  border-radius: 8px;
+  padding: 18px;
+}
