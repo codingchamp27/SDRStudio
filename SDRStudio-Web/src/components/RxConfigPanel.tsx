@@ -33,7 +33,12 @@ export function RxConfigPanel({ deviceSets, onRefresh }: { deviceSets: any[], on
     try {
       const s = await SdrService.getDeviceSettings(dsIdx);
       const k = Object.keys(s).find(x => x.endsWith('Settings'));
-      if (k) { s[k].centerFrequency = Number(centerFreq); await SdrService.patchDeviceSettings(dsIdx, s); }
+      if (k) {
+        // Only patch the single key that changed
+        const patch: any = {};
+        patch[k] = { centerFrequency: Number(centerFreq) };
+        await SdrService.patchDeviceSettings(dsIdx, patch);
+      }
       toast('Center frequency applied', 'success');
       onRefresh();
     } catch { toast('Failed to set frequency', 'error'); }
@@ -43,8 +48,9 @@ export function RxConfigPanel({ deviceSets, onRefresh }: { deviceSets: any[], on
     if (dsIdx < 0 || cIdx < 0) { toast('No DATVDemod channel', 'error'); return; }
     try {
       const s = await SdrService.getChannelSettings(dsIdx, cIdx);
-      const k = Object.keys(s).find(x => x.endsWith('Settings'));
-      if (k) { s[k].symbolRate = Number(symbolRate); await SdrService.patchChannelSettings(dsIdx, cIdx, s); }
+      const channelType: string = (s.channelType as string) || 'DATVDemod';
+      // Only send symbolRate — SDRangel will only apply channelSettingsKeys present
+      await SdrService.patchChannelSettingsKeys(dsIdx, cIdx, channelType, 0, 'DATVDemodSettings', { symbolRate: Number(symbolRate) });
       toast('Symbol rate applied', 'success');
     } catch { toast('Failed to set symbol rate', 'error'); }
   };
@@ -52,7 +58,11 @@ export function RxConfigPanel({ deviceSets, onRefresh }: { deviceSets: any[], on
   const handleStartStop = async () => {
     if (dsIdx < 0) { toast('No Rx device active', 'error'); return; }
     try {
-      await SdrService.setDeviceState(dsIdx, isRunning ? 0 : 1);
+      if (isRunning) {
+        await SdrService.stopDevice(dsIdx);
+      } else {
+        await SdrService.startDevice(dsIdx);
+      }
       toast(isRunning ? 'Rx stopped' : 'Rx started', 'success');
       setTimeout(onRefresh, 800);
     } catch { toast('Failed to toggle Rx state', 'error'); }

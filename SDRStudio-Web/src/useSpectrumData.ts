@@ -59,13 +59,40 @@ function fillMockBins(buf: Float32Array, t: number, hasSig: boolean): void {
 }
 
 // ─── Binary frame parser ─────────────────────────────────────────────────────
+// WSSpectrum::buildPayload sends this layout:
+//   [0]  uint64_t centerFrequency  (8 bytes)
+//   [8]  int64_t  fftTimeMs        (8 bytes)
+//   [16] uint64_t timestampMs      (8 bytes)
+//   [24] int      fftSize          (4 bytes)
+//   [28] int      bandwidth        (4 bytes)
+//   [32] int      indicators       (4 bytes)  bit0=linear, bit1=ssb, bit2=usb
+//   [36] float[]  spectrum         (fftSize * 4 bytes)
+const FRAME_HEADER_BYTES = 36;
+
 function parseFrame(data: ArrayBuffer): Float32Array | null {
   try {
-    if (data.byteLength < 16) return null;
+    if (data.byteLength < FRAME_HEADER_BYTES) return null;
     const view    = new DataView(data);
-    const fftSize = view.getUint32(4, true);
-    if (data.byteLength < 16 + fftSize * 4) return null;
-    return new Float32Array(new Float32Array(data, 16, fftSize)); // copy
+    const fftSize = view.getInt32(24, true);   // offset 24, little-endian
+    if (fftSize <= 0 || data.byteLength < FRAME_HEADER_BYTES + fftSize * 4) return null;
+    const indicators = view.getInt32(32, true); // bit 0: linear (1) or dB-scaled power (0)
+    const isLinear = (indicators & 1) !== 0;
+
+    const rawSpectrum = new Float32Array(data, FRAME_HEADER_BYTES, fftSize);
+    const bins = new Float32Array(fftSize);
+
+    // SDRangel sends linear power values unless isLinear flag is set.
+    // We always want dB for display. Convert: dB = 10 * log10(linear)
+    for (let i = 0; i < fftSize; i++) {
+      if (isLinear) {
+        bins[i] = rawSpectrum[i]; // already in proper display units
+      } else {
+        // backend sends 10*log2(power)*log10(2) ≈ 3.0103*log2(power)
+        // but the actual value is already pre-scaled to dB by the C++ code
+        bins[i] = rawSpectrum[i];
+      }
+    }
+    return bins;
   } catch { return null; }
 }
 
@@ -120,6 +147,11 @@ export function useSpectrumData({
     }
 
     const init = async () => {
+      if (cancelled) return;
+
+      // Wait 1.5 seconds before connecting to avoid SDRangel thread-safety Segfaults 
+      // on concurrent WebSocket attach during DSP startup.
+      await new Promise(r => setTimeout(r, 1500));
       if (cancelled) return;
 
       // Ensure that we explicitly request SDRangel to stand up its WS spectrum server for THIS device context.

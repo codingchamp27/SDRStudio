@@ -37,13 +37,18 @@ export function VideoPanel({ deviceSets }: { deviceSets: any[] }) {
   const patchDatv = async (patch: Record<string, any>) => {
     if (dsIdx < 0 || cIdx < 0) { toast('No DATV Tx channel active', 'error'); return; }
     try {
+      // Fetch current settings to get channelType and direction
       const s = await SdrService.getChannelSettings(dsIdx, cIdx);
-      if (s.DATVModSettings) {
-        Object.assign(s.DATVModSettings, patch);
-        await SdrService.patchChannelSettings(dsIdx, cIdx, s);
-        setDatvSettings({ ...datvSettings, ...patch });
-        toast('Settings applied', 'success');
-      }
+      const channelType: string = (s.channelType as string) || 'DATVMod';
+      const direction: number = (s.direction as number) ?? 1;
+      // Only send the keys we actually changed — SDRangel filters by channelSettingsKeys
+      await SdrService.patchChannelSettingsKeys(
+        dsIdx, cIdx,
+        channelType, direction,
+        'DATVModSettings', patch
+      );
+      setDatvSettings((prev: any) => ({ ...prev, ...patch }));
+      toast('Settings applied', 'success');
     } catch { toast('Failed to apply settings', 'error'); }
   };
 
@@ -84,6 +89,7 @@ export function VideoPanel({ deviceSets }: { deviceSets: any[] }) {
         const path = js.tsPath || js.path || `/tmp/${file.name}`;
         setUploadedName(file.name);
         setTsFileName(path);
+        // tsSource=1 → DATVModSettings::SourceFile (0=SourceImage, 1=SourceFile, 2=SourceUDP)
         await patchDatv({ tsFileName: path, tsSource: 1 });
         toast(`Uploaded: ${file.name}`, 'success');
       } else {
@@ -185,12 +191,12 @@ export function VideoPanel({ deviceSets }: { deviceSets: any[] }) {
           <input
             type="text" value={tsFileName}
             onChange={e => setTsFileName(e.target.value)}
-            onBlur={() => patchDatv({ tsFileName, tsSource: 1 })}
-            onKeyDown={e => e.key === 'Enter' && patchDatv({ tsFileName, tsSource: 1 })}
+            onBlur={() => patchDatv({ tsFileName, tsSource: 1 /* SourceFile */ })}
+            onKeyDown={e => e.key === 'Enter' && patchDatv({ tsFileName, tsSource: 1 /* SourceFile */ })}
             style={{ flex: 1, background: '#111', border: '1px solid #333', color: '#ccc', fontSize: '11px', padding: '4px 6px', borderRadius: '3px' }}
             placeholder="/path/to/video.ts"
           />
-          <button className="btn" onClick={() => patchDatv({ tsFileName, tsSource: 1 })}>Set</button>
+          <button className="btn" onClick={() => patchDatv({ tsFileName, tsSource: 1 /* SourceFile */ })}>Set</button>
         </div>
 
         {/* Controls */}
