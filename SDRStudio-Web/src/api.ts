@@ -197,5 +197,12 @@ export const SdrService = {
     // Expected structure: {"copyToUDP": 0, "index": 0, "name": "...", "recordToFile": 1, ...}
     const response = await sdrApi.patch('/audio/output/parameters', parameters);
     return response.data;
-  }
+  },
+
+  // ---- CHANNEL REPORT ----
+  // Returns live report data: for DATVMod this includes tsFileBitrate, tsFileLength, channelPowerDB etc.
+  getChannelReport: async (deviceSetIndex: number, channelIndex: number) => {
+    const response = await sdrApi.get(`/deviceset/${deviceSetIndex}/channel/${channelIndex}/report`);
+    return response.data;
+  },
 };

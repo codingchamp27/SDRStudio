@@ -30,14 +30,19 @@ export default defineConfig({
             fs.mkdirSync(uploadDir, { recursive: true });
           }
 
-          const fileName = req.headers['x-file-name'] || `upload_${Date.now()}`;
-          const safeName = Array.isArray(fileName) ? fileName[0] : fileName.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+          const rawFileName = req.headers['x-file-name'] || `upload_${Date.now()}`;
+          const decodedFileName = decodeURIComponent(Array.isArray(rawFileName) ? rawFileName[0] : rawFileName);
+          const safeName = decodedFileName.replace(/[^a-zA-Z0-9.\-_]/g, '_');
           const filePath = path.join(uploadDir, safeName);
 
           const stream = fs.createWriteStream(filePath);
           req.pipe(stream);
 
           req.on('end', () => {
+            stream.close();
+          });
+
+          stream.on('close', () => {
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify({ path: filePath }));
           });

@@ -132,9 +132,8 @@ function TopNavbar({ isConnected, onOpenPresets, onToggleFeatures, featuresOpen,
       </div>
       <div className="nav-divider"></div>
 
-      {/* Device creation */}
+      {/* Device creation — Tx only */}
       <div className="navbar-group">
-        <button className="sdr-btn danger" title="Create new Rx (receiver) workspace" onClick={handleCreateRx}>✚ Rx</button>
         <button className="sdr-btn success" title="Create new Tx (transmitter) workspace" onClick={handleCreateTx}>✚ Tx</button>
         <button
           className="sdr-btn"
@@ -621,13 +620,70 @@ function DynamicSettingsEditor({ settings, onChange }: { settings: Record<string
         }
 
         if (typeof rawValue === 'number') {
+          const selectStyle = { width: '100%', padding: '2px', fontSize: '11px', background: 'var(--bg-medium)', color: '#fff', border: '1px solid var(--border-color)' };
+          
+          if (key === 'tsSource' || key === 'atvModInput') {
+             return (
+               <div key={key} className="setting-group compact" style={{ margin: 0 }}>
+                 <label style={{ fontSize: '10px' }}>{key}</label>
+                 <select value={rawValue} onChange={e => onChange(key, Number(e.target.value))} style={selectStyle}>
+                   <option value={0}>Image</option>
+                   <option value={1}>File</option>
+                   <option value={2}>UDP</option>
+                 </select>
+               </div>
+             );
+          }
+          if (key === 'modulation') {
+             return (
+               <div key={key} className="setting-group compact" style={{ margin: 0 }}>
+                 <label style={{ fontSize: '10px' }}>{key}</label>
+                 <select value={rawValue} onChange={e => onChange(key, Number(e.target.value))} style={selectStyle}>
+                   <option value={0}>BPSK</option>
+                   <option value={1}>QPSK</option>
+                   <option value={2}>8PSK</option>
+                   <option value={3}>16APSK</option>
+                   <option value={4}>32APSK</option>
+                 </select>
+               </div>
+             );
+          }
+          if (key === 'fec') {
+             return (
+               <div key={key} className="setting-group compact" style={{ margin: 0 }}>
+                 <label style={{ fontSize: '10px' }}>{key}</label>
+                 <select value={rawValue} onChange={e => onChange(key, Number(e.target.value))} style={selectStyle}>
+                   <option value={0}>1/2</option>
+                   <option value={1}>2/3</option>
+                   <option value={2}>3/4</option>
+                   <option value={3}>5/6</option>
+                   <option value={4}>7/8</option>
+                   <option value={5}>4/5</option>
+                   <option value={6}>8/9</option>
+                   <option value={7}>9/10</option>
+                 </select>
+               </div>
+             );
+          }
+          if (key === 'standard') {
+             return (
+               <div key={key} className="setting-group compact" style={{ margin: 0 }}>
+                 <label style={{ fontSize: '10px' }}>{key}</label>
+                 <select value={rawValue} onChange={e => onChange(key, Number(e.target.value))} style={selectStyle}>
+                   <option value={0}>DVB-S</option>
+                   <option value={1}>DVB-S2</option>
+                 </select>
+               </div>
+             );
+          }
+
           return (
             <div key={key} className="setting-group compact" style={{ margin: 0 }}>
               <label style={{ fontSize: '10px' }}>{key}</label>
               <input type="number" defaultValue={rawValue} 
                 onBlur={e => onChange(key, Number(e.target.value))} 
                 onKeyDown={e => e.key === 'Enter' && e.currentTarget.blur()}
-                style={{ width: '100%', padding: '2px', fontSize: '11px', background: 'var(--bg-medium)', color: '#fff', border: '1px solid var(--border-color)' }}
+                style={selectStyle}
               />
             </div>
           );
@@ -661,6 +717,9 @@ function ChannelWorkspaceCard({ dsIdx, cIdx, channel }: { dsIdx: number, cIdx: n
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLooping, setIsLooping] = useState(false);
 
+  // ── File path state (synced from backend so play button works after reload) ─
+  const [tsFilePath, setTsFilePath] = useState<string>('');
+
   // Detect plugin type from channelType
   const channelId: string = channel.id || channel.channelType || '';
   const isTx = channel.direction === 1;
@@ -675,8 +734,29 @@ function ChannelWorkspaceCard({ dsIdx, cIdx, channel }: { dsIdx: number, cIdx: n
   const fileNameField  = isDatv ? 'tsFileName'    : 'videoFileName';
   const playField      = isDatv ? 'tsFilePlay'    : 'videoPlay';
   const loopField      = isDatv ? 'tsFilePlayLoop' : 'videoPlayLoop';
-  const srcField       = isDatv ? 'tsSource'      : 'atvModInput'; // 0 = File (DATV), 2 = Video (ATV)
-  const srcVal         = isDatv ? 0 : 2;
+  const srcField       = isDatv ? 'tsSource'      : 'atvModInput'; // 1 = File (DATV), 2 = Video (ATV)
+  const srcVal         = isDatv ? 1 : 2;
+
+  // ── Sync file path from backend on mount so play button works after page reload ─
+  // NOTE: We intentionally do NOT sync isPlaying/isLooping here. Syncing those
+  // caused a critical bug: if the backend was already playing, the frontend
+  // would show ⏸ instead of ▶, so clicking ▶ would send tsFilePlay=0 (pause).
+  useEffect(() => {
+    if (!supportsUpload) return;
+    const syncFilePath = async () => {
+      try {
+        const s = await SdrService.getChannelSettings(dsIdx, cIdx);
+        const key = Object.keys(s).find(k => k.endsWith('Settings'));
+        if (!key) return;
+        const filePath: string = s[key][fileNameField] || '';
+        if (filePath) {
+          setTsFilePath(filePath);
+          setUploadStatus({ name: filePath.split('/').pop() || filePath, path: filePath, status: 'done' });
+        }
+      } catch { /* backend may not be ready */ }
+    };
+    syncFilePath();
+  }, [dsIdx, cIdx, supportsUpload]);
 
   const handleUploadClick = () => fileInputRef.current?.click();
 
@@ -688,7 +768,7 @@ function ChannelWorkspaceCard({ dsIdx, cIdx, channel }: { dsIdx: number, cIdx: n
     try {
       const response = await fetch('/api/upload', {
         method: 'POST',
-        headers: { 'x-file-name': file.name, 'Content-Type': 'application/octet-stream' },
+        headers: { 'x-file-name': encodeURIComponent(file.name), 'Content-Type': 'application/octet-stream' },
         body: file
       });
       if (!response.ok) throw new Error('Upload failed');
@@ -701,10 +781,19 @@ function ChannelWorkspaceCard({ dsIdx, cIdx, channel }: { dsIdx: number, cIdx: n
         const current = await SdrService.getChannelSettings(dsIdx, cIdx);
         const key = Object.keys(current).find(k => k.endsWith('Settings'));
         if (key) {
+          // If the file path is the exact same, SDRangel's API diff will ignore it.
+          // We must send a dummy path first to force it to close and reopen the new file.
+          if (current[key][fileNameField] === savedPath) {
+            await SdrService.patchChannelSettings(dsIdx, cIdx, {
+              channelType: current.channelType,
+              direction: current.direction,
+              [key]: { [fileNameField]: "" },
+            });
+          }
           await SdrService.patchChannelSettings(dsIdx, cIdx, {
             channelType: current.channelType,
             direction: current.direction,
-            [key]: { ...current[key], [fileNameField]: savedPath, [srcField]: srcVal },
+            [key]: { [fileNameField]: savedPath, [srcField]: srcVal },
           });
           toast(`File set: ${savedPath}`, 'success');
         } else {
@@ -730,7 +819,7 @@ function ChannelWorkspaceCard({ dsIdx, cIdx, channel }: { dsIdx: number, cIdx: n
       await SdrService.patchChannelSettings(dsIdx, cIdx, {
         channelType: current.channelType,
         direction: current.direction,
-        [key]: { ...current[key], [playField]: next ? 1 : 0, [srcField]: srcVal },
+        [key]: { [playField]: next ? 1 : 0 },
       });
     } catch { toast('Failed to toggle play state', 'error'); setIsPlaying(!next); }
   };
@@ -745,7 +834,7 @@ function ChannelWorkspaceCard({ dsIdx, cIdx, channel }: { dsIdx: number, cIdx: n
       await SdrService.patchChannelSettings(dsIdx, cIdx, {
         channelType: current.channelType,
         direction: current.direction,
-        [key]: { ...current[key], [loopField]: next ? 1 : 0, [srcField]: srcVal },
+        [key]: { [loopField]: next ? 1 : 0 },
       });
     } catch { toast('Failed to toggle loop state', 'error'); setIsLooping(!next); }
   };
@@ -852,9 +941,7 @@ function ChannelWorkspaceCard({ dsIdx, cIdx, channel }: { dsIdx: number, cIdx: n
               <input type="file" ref={fileInputRef} style={{ display: 'none' }}
                 accept=".raw,.wav,.sdriq,.ts,.mp4,.mpg,.mpeg,.mkv,.avi"
                 onChange={handleFileChange} />
-              <button
-                title="Select & upload media file"
-                onClick={handleUploadClick}
+              <button title="Select & upload media file" onClick={handleUploadClick}
                 style={{
                   background: 'rgba(40,40,60,0.8)', border: '1px solid #444', color: '#ccc',
                   borderRadius: '4px', padding: '3px 8px', fontSize: '16px', cursor: 'pointer',
@@ -863,55 +950,132 @@ function ChannelWorkspaceCard({ dsIdx, cIdx, channel }: { dsIdx: number, cIdx: n
                 🎞
               </button>
               <span style={{
-                flex: 1, fontSize: '10px', color: uploadStatus ? (uploadStatus.status === 'uploading' ? '#ffeb3b' : '#2ed573') : '#555',
+                flex: 1, fontSize: '10px',
+                color: uploadStatus
+                  ? (uploadStatus.status === 'uploading' ? '#ffeb3b' : '#2ed573')
+                  : (tsFilePath ? '#2ed573' : '#555'),
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}>
                 {uploadStatus
                   ? (uploadStatus.status === 'uploading' ? '⏳ uploading…' : uploadStatus.name)
-                  : '…'}
+                  : (tsFilePath ? tsFilePath.split('/').pop() : '…')}
               </span>
             </div>
 
-            {/* Row 2: Play + Loop, matching SDRangel's native button strip */}
+            {/* Row 2: Play + Loop */}
+            {/* Enabled when file path is known — either from a fresh upload OR synced from backend on load */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-              {/* Play / Pause */}
               <button
                 title={isPlaying ? 'Pause' : 'Play'}
                 onClick={handlePlayToggle}
-                disabled={!uploadStatus || uploadStatus.status === 'uploading'}
+                disabled={!tsFilePath && (!uploadStatus || uploadStatus.status === 'uploading')}
                 style={{
                   background: isPlaying ? 'rgba(46,213,115,0.25)' : 'rgba(40,40,60,0.8)',
                   border: `1px solid ${isPlaying ? '#2ed573' : '#444'}`,
                   color: isPlaying ? '#2ed573' : '#aaa',
                   borderRadius: '4px', padding: '3px 10px', fontSize: '14px', cursor: 'pointer',
-                  opacity: (!uploadStatus || uploadStatus.status === 'uploading') ? 0.4 : 1,
+                  opacity: (!tsFilePath && (!uploadStatus || uploadStatus.status === 'uploading')) ? 0.4 : 1,
                 }}>
                 {isPlaying ? '⏸' : '▶'}
               </button>
 
-              {/* Loop */}
               <button
                 title={isLooping ? 'Disable loop' : 'Enable loop'}
                 onClick={handleLoopToggle}
-                disabled={!uploadStatus || uploadStatus.status === 'uploading'}
+                disabled={!tsFilePath && (!uploadStatus || uploadStatus.status === 'uploading')}
                 style={{
                   background: isLooping ? 'rgba(52,152,219,0.25)' : 'rgba(40,40,60,0.8)',
                   border: `1px solid ${isLooping ? '#3498db' : '#444'}`,
                   color: isLooping ? '#3498db' : '#aaa',
                   borderRadius: '4px', padding: '3px 10px', fontSize: '14px', cursor: 'pointer',
-                  opacity: (!uploadStatus || uploadStatus.status === 'uploading') ? 0.4 : 1,
+                  opacity: (!tsFilePath && (!uploadStatus || uploadStatus.status === 'uploading')) ? 0.4 : 1,
                 }}>
                 🔁
               </button>
 
-              {/* Tiny file path hint */}
               {uploadStatus?.status === 'done' && (
-                <span
-                  title={uploadStatus.path}
+                <span title={uploadStatus.path}
                   style={{ fontSize: '9px', color: '#555', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
                   {uploadStatus.path}
                 </span>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* ── DATV Modulator Specific Controls ── */}
+
+        {/* ── DATV Modulator Specific Controls ── */}
+        {isDatv && (
+          <div style={{ borderTop: '1px solid var(--border-color)', padding: '6px 6px 4px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {/* Row 1: Symbol Rate & BW */}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <div className="setting-group compact" style={{ margin: 0, flex: 1 }}>
+                <label style={{ fontSize: '10px' }}>Symbols/s</label>
+                <input type="number" defaultValue={fullSettings?.symbolRate ?? 250000} 
+                  onBlur={e => patchChannelSetting('symbolRate', Number(e.target.value))}
+                  onKeyDown={e => e.key === 'Enter' && e.currentTarget.blur()}
+                  style={{ width: '100%', padding: '2px', fontSize: '11px', background: 'var(--bg-medium)', color: '#fff', border: '1px solid var(--border-color)' }} />
+              </div>
+              <div className="setting-group compact" style={{ margin: 0, flex: 1 }}>
+                <label style={{ fontSize: '10px' }}>BW (kHz)</label>
+                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                  <input type="range" min="1" max="5000" defaultValue={fullSettings?.rfBandwidth ? fullSettings.rfBandwidth / 1000 : 1000} 
+                    onChange={e => e.currentTarget.nextElementSibling!.textContent = `${e.target.value}kHz`}
+                    onMouseUp={e => patchChannelSetting('rfBandwidth', Number(e.currentTarget.value) * 1000)}
+                    style={{ flex: 1 }} />
+                  <span style={{ fontSize: '10px', minWidth: '45px', textAlign: 'right' }}>
+                    {fullSettings?.rfBandwidth ? fullSettings.rfBandwidth / 1000 : 1000}kHz
+                  </span>
+                </div>
+              </div>
+            </div>
+            
+            {/* Row 2: Modulation & FEC */}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <div className="setting-group compact" style={{ margin: 0, flex: 1 }}>
+                <label style={{ fontSize: '10px' }}>Modulation</label>
+                <select defaultValue={fullSettings?.modulation ?? 1} onChange={e => patchChannelSetting('modulation', Number(e.target.value))}
+                  style={{ width: '100%', padding: '2px', fontSize: '11px', background: 'var(--bg-medium)', color: '#fff', border: '1px solid var(--border-color)' }}>
+                  <option value={0}>BPSK</option>
+                  <option value={1}>QPSK</option>
+                  <option value={2}>8PSK</option>
+                  <option value={3}>16APSK</option>
+                  <option value={4}>32APSK</option>
+                </select>
+              </div>
+              <div className="setting-group compact" style={{ margin: 0, flex: 1 }}>
+                <label style={{ fontSize: '10px' }}>FEC</label>
+                <select defaultValue={fullSettings?.fec ?? 0} onChange={e => patchChannelSetting('fec', Number(e.target.value))}
+                  style={{ width: '100%', padding: '2px', fontSize: '11px', background: 'var(--bg-medium)', color: '#fff', border: '1px solid var(--border-color)' }}>
+                  <option value={0}>1/2</option>
+                  <option value={1}>2/3</option>
+                  <option value={2}>3/4</option>
+                  <option value={3}>5/6</option>
+                  <option value={4}>7/8</option>
+                  <option value={5}>4/5</option>
+                  <option value={6}>8/9</option>
+                  <option value={7}>9/10</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Row 3: UDP Address & Port */}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <div className="setting-group compact" style={{ margin: 0, flex: 1 }}>
+                <label style={{ fontSize: '10px' }}>UDP Address</label>
+                <input type="text" defaultValue={fullSettings?.udpAddress ?? '127.0.0.1'} 
+                  onBlur={e => patchChannelSetting('udpAddress', e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && e.currentTarget.blur()}
+                  style={{ width: '100%', padding: '2px', fontSize: '11px', background: 'var(--bg-medium)', color: '#fff', border: '1px solid var(--border-color)' }} />
+              </div>
+              <div className="setting-group compact" style={{ margin: 0, flex: 1 }}>
+                <label style={{ fontSize: '10px' }}>UDP Port</label>
+                <input type="number" defaultValue={fullSettings?.udpPort ?? 5004} 
+                  onBlur={e => patchChannelSetting('udpPort', Number(e.target.value))}
+                  onKeyDown={e => e.key === 'Enter' && e.currentTarget.blur()}
+                  style={{ width: '100%', padding: '2px', fontSize: '11px', background: 'var(--bg-medium)', color: '#fff', border: '1px solid var(--border-color)' }} />
+              </div>
             </div>
           </div>
         )}
@@ -1605,6 +1769,155 @@ function MainWorkspace({ deviceSets, isConnected }: { deviceSets: DeviceSet[], i
   );
 }
 
+function MediaPlayerPanel({ deviceSets }: { deviceSets: DeviceSet[] }) {
+  // Find the DATV channel's file path from any TX device set
+  const [filePath, setFilePath] = useState('');
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  useEffect(() => {
+    const txSets = deviceSets.filter(ds => ds.samplingDevice?.direction === 1);
+    if (txSets.length === 0) return;
+    // Try to find a DATV channel with a file loaded
+    const trySync = async () => {
+      for (let i = 0; i < deviceSets.length; i++) {
+        const chs = deviceSets[i].channels || [];
+        for (let c = 0; c < chs.length; c++) {
+          if ((chs[c].id || chs[c].channelType || '').includes('DATVMod')) {
+            try {
+              const s = await SdrService.getChannelSettings(i, c);
+              const key = Object.keys(s).find(k => k.endsWith('Settings'));
+              if (key && s[key].tsFileName) {
+                setFilePath(s[key].tsFileName);
+                setIsPlaying(!!(s[key].tsFilePlay));
+              }
+            } catch { /* ignore */ }
+          }
+        }
+      }
+    };
+    trySync();
+    const id = setInterval(trySync, 3000);
+    return () => clearInterval(id);
+  }, [deviceSets]);
+
+  const fileName = filePath ? filePath.split('/').pop() : null;
+
+  return (
+    <div style={{
+      flexShrink: 0, height: '180px',
+      background: 'linear-gradient(180deg,#0c0e13 0%,#090b10 100%)',
+      borderTop: '1px solid rgba(255,140,0,0.25)',
+      display: 'flex', flexDirection: 'column', overflow: 'hidden',
+    }}>
+      {/* Header */}
+      <div style={{
+        background: 'linear-gradient(90deg,rgba(255,140,0,0.12),transparent)',
+        borderBottom: '1px solid rgba(255,140,0,0.15)',
+        padding: '7px 16px', display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0,
+      }}>
+        <span style={{ background: 'rgba(255,140,0,0.18)', color: '#ff8c00', fontWeight: 800, fontSize: '9px', padding: '2px 7px', borderRadius: '3px', border: '1px solid rgba(255,140,0,0.35)', letterSpacing: '0.1em' }}>MEDIA</span>
+        <span style={{ fontSize: '13px', fontWeight: 700, color: '#ddd' }}>Attached Video Playback</span>
+        <span style={{ marginLeft: 'auto', fontSize: '10px', color: isPlaying ? '#2ed573' : '#555', fontWeight: 700 }}>
+          {isPlaying ? '● TRANSMITTING' : '○ IDLE'}
+        </span>
+      </div>
+
+      {/* Body */}
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '20px', padding: '10px 20px', minHeight: 0 }}>
+        {/* Waveform / thumbnail area */}
+        <div style={{
+          width: '220px', flexShrink: 0, height: '100%',
+          background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,140,0,0.15)',
+          borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          position: 'relative', overflow: 'hidden',
+        }}>
+          {/* animated SVG waveform */}
+          <svg width="200" height="80" viewBox="0 0 200 80" style={{ opacity: isPlaying ? 1 : 0.3 }}>
+            <defs>
+              <linearGradient id="wg" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stopColor="#ff8c00" stopOpacity="0.9"/>
+                <stop offset="100%" stopColor="#ff4500" stopOpacity="0.3"/>
+              </linearGradient>
+            </defs>
+            {[8,18,30,12,40,22,35,15,45,25,18,38,10,42,28,20,36,14,32,24,16,44,26,12,38,20,34,10,42,22].map((h, i) => (
+              <rect key={i} x={i*6+5} y={(80-h)/2} width={4} height={h}
+                fill="url(#wg)" rx={2}
+                style={{ animation: isPlaying ? `pulse ${0.4 + (i%5)*0.1}s ease-in-out infinite alternate` : 'none' }}
+              />
+            ))}
+          </svg>
+          <div style={{ position: 'absolute', bottom: '6px', left: '8px', fontSize: '9px', color: '#555', fontFamily: 'JetBrains Mono,monospace' }}>
+            {isPlaying ? 'LIVE TX' : 'STANDBY'}
+          </div>
+        </div>
+
+        {/* File info */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', minWidth: 0 }}>
+          <div>
+            <div style={{ fontSize: '10px', color: '#555', marginBottom: '3px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Transport Stream File</div>
+            <div style={{
+              fontSize: '15px', fontWeight: 700, color: fileName ? '#e0e0e0' : '#444',
+              fontFamily: 'JetBrains Mono,monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              {fileName || '— no file loaded —'}
+            </div>
+            {filePath && (
+              <div style={{ fontSize: '9px', color: '#3a3', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                title={filePath}>
+                {filePath}
+              </div>
+            )}
+          </div>
+
+          {/* Status badges */}
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {[
+              { label: 'FORMAT', value: fileName?.endsWith('.ts') ? 'MPEG-TS' : fileName ? 'MEDIA' : '—' },
+              { label: 'STATUS', value: isPlaying ? 'PLAYING' : 'PAUSED', color: isPlaying ? '#2ed573' : '#666' },
+              { label: 'MODE', value: 'DVB-S/S2' },
+              { label: 'SOURCE', value: 'FILE' },
+            ].map(b => (
+              <div key={b.label} style={{
+                background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: '4px', padding: '4px 10px', display: 'flex', flexDirection: 'column', gap: '1px',
+              }}>
+                <span style={{ fontSize: '8px', color: '#555', letterSpacing: '0.1em' }}>{b.label}</span>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: b.color || '#ccc', fontFamily: 'JetBrains Mono,monospace' }}>{b.value}</span>
+              </div>
+            ))}
+          </div>
+
+          {!filePath && (
+            <div style={{ fontSize: '11px', color: '#444', lineHeight: 1.6 }}>
+              Upload a <code style={{ color: '#ff8c00', background: 'rgba(255,140,0,0.1)', padding: '1px 5px', borderRadius: '3px' }}>.ts</code> file in the DATV Modulator panel to begin transmission.
+            </div>
+          )}
+        </div>
+
+        {/* Transmission indicator */}
+        <div style={{
+          width: '80px', flexShrink: 0, display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', gap: '8px',
+        }}>
+          <div style={{
+            width: '48px', height: '48px', borderRadius: '50%',
+            background: isPlaying ? 'radial-gradient(circle,rgba(46,213,115,0.3),rgba(46,213,115,0.05))' : 'radial-gradient(circle,rgba(255,255,255,0.05),rgba(0,0,0,0))',
+            border: `2px solid ${isPlaying ? 'rgba(46,213,115,0.6)' : 'rgba(255,255,255,0.08)'}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: isPlaying ? '0 0 20px rgba(46,213,115,0.2)' : 'none',
+            transition: 'all 0.4s ease',
+          }}>
+            <span style={{ fontSize: '18px' }}>{isPlaying ? '📡' : '📻'}</span>
+          </div>
+          <span style={{ fontSize: '9px', color: isPlaying ? '#2ed573' : '#444', fontWeight: 700, letterSpacing: '0.1em', textAlign: 'center' }}>
+            {isPlaying ? 'TX ACTIVE' : 'NO SIGNAL'}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SdrApplication() {
   const [deviceSets, setDeviceSets] = useState<DeviceSet[]>([]);
   const [isConnected, setIsConnected] = useState<boolean>(false);
@@ -1671,33 +1984,96 @@ function SdrApplication() {
         audioOutDevices={audioOutDevices}
       />
 
-      <div className="main-stage">
-        {/* LEFT PANEL – Device Sidebar */}
-        <div className="sidebar">
-          {deviceSets.length === 0 && (
-            <div style={{ padding: '20px', color: '#666', textAlign: 'center' }}>
-              <p>No devices active.</p>
-              <p style={{ fontSize: '12px', marginTop: '10px' }}>Use the + Rx or + Tx buttons in the top navbar.</p>
+      {/* ── TX DASHBOARD: 3-panel broadcast console ── */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'linear-gradient(160deg, #0d0f14 0%, #111318 60%, #0a0d11 100%)' }}>
+
+        {/* TOP ROW: TX Device (left) + DATV Modulator (right) */}
+        <div style={{ display: 'flex', flex: '1 1 0', minHeight: 0, gap: '1px', background: 'rgba(255,140,0,0.08)' }}>
+
+          {/* ── TX DEVICE PANEL ── */}
+          <div style={{
+            flex: '0 0 420px', display: 'flex', flexDirection: 'column', overflow: 'hidden',
+            background: 'linear-gradient(145deg,#13151c,#0e1018)',
+            borderRight: '1px solid rgba(255,140,0,0.2)',
+          }}>
+            {/* Panel header */}
+            <div style={{
+              background: 'linear-gradient(90deg,rgba(255,140,0,0.15),rgba(255,140,0,0.03))',
+              borderBottom: '1px solid rgba(255,140,0,0.3)', padding: '10px 16px',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ background: '#c0392b', color: '#fff', fontWeight: 800, fontSize: '10px', padding: '2px 7px', borderRadius: '3px', letterSpacing: '0.1em' }}>TX</span>
+                <span style={{ fontSize: '14px', fontWeight: 700, color: '#e0e0e0', fontFamily: 'Inter,sans-serif' }}>Device Control</span>
+              </div>
+              <span style={{ fontSize: '10px', color: '#555', fontFamily: 'JetBrains Mono,monospace' }}>
+                {deviceSets.find(d => d.samplingDevice?.direction === 1)?.samplingDevice?.displayedName || 'No Device'}
+              </span>
             </div>
-          )}
-          {deviceSets.map((ds, idx) => (
-            <DeviceSidebarCard
-              key={idx}
-              idx={idx}
-              ds={ds}
-              deviceSetCount={deviceSets.length}
-              onAddChannel={() => setRegistryTarget(idx)}
-            />
-          ))}
+
+            {/* Scrollable device list */}
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              {deviceSets.length === 0 ? (
+                <div style={{ padding: '40px 20px', textAlign: 'center', color: '#444' }}>
+                  <div style={{ fontSize: '32px', marginBottom: '12px' }}>📡</div>
+                  <div style={{ fontSize: '13px', color: '#555', lineHeight: 1.6 }}>No TX device active.<br/>Click <strong style={{color:'#2ed573'}}>✚ Tx</strong> in the top bar to add one.</div>
+                </div>
+              ) : deviceSets.map((ds, idx) => (
+                <DeviceSidebarCard key={idx} idx={idx} ds={ds} deviceSetCount={deviceSets.length} onAddChannel={() => setRegistryTarget(idx)} />
+              ))}
+            </div>
+          </div>
+
+          {/* ── DATV MODULATOR PANEL ── */}
+          <div style={{
+            flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+            background: 'linear-gradient(145deg,#12141b,#0d0f16)',
+          }}>
+            <div style={{
+              background: 'linear-gradient(90deg,rgba(255,140,0,0.12),rgba(255,140,0,0.02))',
+              borderBottom: '1px solid rgba(255,140,0,0.25)', padding: '10px 16px',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ background: 'rgba(255,140,0,0.2)', color: '#ff8c00', fontWeight: 800, fontSize: '10px', padding: '2px 7px', borderRadius: '3px', border: '1px solid rgba(255,140,0,0.4)', letterSpacing: '0.08em' }}>M-DATV</span>
+                <span style={{ fontSize: '14px', fontWeight: 700, color: '#e0e0e0' }}>Plugins</span>
+              </div>
+              <span style={{ fontSize: '10px', color: '#555' }}>DATV Modulator</span>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              {deviceSets.length === 0 ? (
+                <div style={{ padding: '40px 20px', textAlign: 'center', color: '#444' }}>
+                  <div style={{ fontSize: '32px', marginBottom: '12px' }}>🔌</div>
+                  <div style={{ fontSize: '13px', color: '#555' }}>Add a TX device first, then attach a DATV Modulator channel.</div>
+                </div>
+              ) : (
+                deviceSets.map((ds, idx) => {
+                  const channels = ds.channels || [];
+                  if (channels.length === 0) return (
+                    <div key={idx} style={{ padding: '32px 20px', textAlign: 'center', color: '#444' }}>
+                      <div style={{ fontSize: '13px', color: '#555', lineHeight: 1.8 }}>
+                        No channel plugins on device {idx}.<br/>
+                        <button onClick={() => setRegistryTarget(idx)} style={{
+                          marginTop: '12px', background: 'rgba(255,140,0,0.15)', border: '1px solid rgba(255,140,0,0.4)',
+                          color: '#ff8c00', borderRadius: '6px', padding: '6px 18px', cursor: 'pointer', fontSize: '12px', fontWeight: 600,
+                        }}>+ Add Channel Plugin</button>
+                      </div>
+                    </div>
+                  );
+                  return channels.map((ch: any, cIdx: number) => (
+                    <ChannelWorkspaceCard key={`${idx}-${cIdx}`} dsIdx={idx} cIdx={cIdx} channel={ch} />
+                  ));
+                })
+              )}
+            </div>
+          </div>
+
+          {showFeatures && <FeatureSidebar onClose={() => setShowFeatures(false)} />}
         </div>
 
-        {/* CENTER – Main Workspace (simplified) */}
-        <MainWorkspace deviceSets={deviceSets} isConnected={isConnected} />
-
-        {/* RIGHT PANEL – Feature Sidebar (togglable) */}
-        {showFeatures && (
-          <FeatureSidebar onClose={() => setShowFeatures(false)} />
-        )}
+        {/* ── BOTTOM: MEDIA PLAYER PANEL ── */}
+        <MediaPlayerPanel deviceSets={deviceSets} />
       </div>
 
       {/* Modals */}
@@ -1708,15 +2084,8 @@ function SdrApplication() {
           direction={deviceSets[registryTarget].samplingDevice?.direction || 0}
         />
       )}
-      {showPresets && (
-        <PresetsModal
-          onClose={() => setShowPresets(false)}
-          deviceSetCount={deviceSets.length || 1}
-        />
-      )}
-      {showPreferences && (
-        <PreferencesModal onClose={() => setShowPreferences(false)} />
-      )}
+      {showPresets && <PresetsModal onClose={() => setShowPresets(false)} deviceSetCount={deviceSets.length || 1} />}
+      {showPreferences && <PreferencesModal onClose={() => setShowPreferences(false)} />}
     </div>
   );
 }

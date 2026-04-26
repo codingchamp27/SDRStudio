@@ -4,6 +4,7 @@
   --bg-dark: #1e1e1e;
   --bg-panel: #25262a;
   --bg-toolbar: #2d2e33;
+  --bg-medium: #1a1b1f;
   --bg-black: #050505;
   --border-color: #1a1a1c;
   --border-highlight: #ff8c00;
@@ -13,6 +14,11 @@
   --accent-red: #ff4757;
   --accent-green: #2ed573;
   --bg-toast: #333;
+}
+
+@keyframes pulse {
+  from { transform: scaleY(0.5); opacity: 0.6; }
+  to   { transform: scaleY(1.2); opacity: 1; }
 }
 
 /* GLOBAL TOAST SYSTEM */
