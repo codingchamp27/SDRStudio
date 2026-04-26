@@ -1,0 +1,21 @@
+node_modules/
+dist/
+build/
+out/
+.DS_Store
+*.log
+.env
+.idea/
+.vscode/
+bin/
+obj/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Ignore the massive electron binaries in the TX folder
+TX_v1/**/node_modules/
+
+# Specifically ignore node_modules in subfolders but keep source
+**/node_modules/

@@ -10,7 +10,6 @@
  */
 
 import { useEffect, useRef, type MutableRefObject } from 'react';
-import { SdrService } from './api';
 
 export type DataSource = 'LIVE' | 'DEMO' | 'OFFLINE';
 
