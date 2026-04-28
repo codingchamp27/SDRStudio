@@ -1,0 +1,52 @@
+
+.tabButtons {
+  display: flex;
+  gap: 1rem;
+  /* margin-bottom: 1rem; */
+  background-image: linear-gradient(180deg, #44468b, #222346);
+  width: max-content;
+  /* max-width: fit-content; */
+  margin-left: 2.2rem;
+  margin-top: 1.375rem;
+  border-radius: 40px;
+  gap: 2rem;
+}
+
+.tabButtons button {
+  padding: 0.8rem 2rem;
+  border: none;
+  border-radius: 40px;
+  cursor: pointer;
+  background: transparent;
+  font-weight: 600;
+  color: #bebebe;
+  transition: background 0.2s ease;
+}
+
+.tabButtons button:hover {
+  /* background: #444; */
+}
+
+.tabButtons .active {
+  background: transparent; /* highlight active tab */
+  color: white;
+  font-weight: 600;
+  background-image: linear-gradient(180deg, #512619, #222346);
+ padding: 0.8rem 2rem;
+  border-radius: 40px;
+}
+
+/* .tabContent {
+  margin-top: 1rem;
+} */
+
+.mainConatiner{
+  height: 92vh;
+  width: 100%;
+  overflow-y: hidden;
+  background-image: linear-gradient(#1e294b91,#122343);
+   display: flex;
+   flex-direction: column;
+   align-items: flex-start;
+   justify-content: center;
+}

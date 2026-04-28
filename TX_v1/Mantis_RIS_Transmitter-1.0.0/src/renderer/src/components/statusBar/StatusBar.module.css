@@ -1,0 +1,39 @@
+.statusbar {
+    display: flex;
+    align-items: center;
+    padding: 10px;
+    opacity: 1;
+}
+
+.devicestatus {
+    display: flex;
+    align-items: center;
+}
+
+.devicename {
+    margin-right: 5px;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.icon {
+    margin-right: 5px;
+    font-size: 28px;
+   
+}
+
+.check {
+    color: rgb(51, 187, 51);
+}
+
+.cross{
+    color: rgb(255, 60, 0);
+}
+
+.dottedline{
+    height: 1.5px; 
+    width: 60px; 
+    background: linear-gradient(to right, rgb(87, 87, 87) 50%, transparent 50%);
+    background-size: 8px 2px; 
+    margin: 0 10px;   
+}

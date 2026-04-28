@@ -1,0 +1,47 @@
+.container{
+    padding: 0px 40px;
+    height: 8vh;
+    min-height: 50px;
+    background-image: linear-gradient(#363474, #3C120F);
+    color: white;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.text{
+    font-size: 22px;
+    display: flex;
+    align-items: center;
+}
+
+.operation{
+    width: 15%;
+    min-width: 200px;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.transmitter{
+    display: flex;
+    justify-content: space-around;
+    background-image: linear-gradient(#332D47, #2B347D);
+    padding: 10px 30px;
+    width: 100%;
+    height: 60%;
+    border-radius: 40px;
+}
+
+.image{
+    left: 0;
+    display: flex;
+    margin-left: 0;
+}
+
+.icontext{
+    display: flex;
+    font-weight: bolder;
+}

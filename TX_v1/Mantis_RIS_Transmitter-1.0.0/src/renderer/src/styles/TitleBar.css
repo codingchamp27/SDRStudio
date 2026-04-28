@@ -1,0 +1,60 @@
+
+.title-bar {
+    -webkit-app-region: no-drag;
+    height: 3vh;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+    background:	#202327;
+    font-family: 'Inter', sans-serif;
+  }
+
+  /* .title-bar {
+    display: flex;
+    align-items: center;
+    height: 32px;
+    background: #2f3241;
+  } */
+  
+  .title-spacer {
+    flex: 1;
+  }
+  
+  .title-text {
+    -webkit-app-region: no-drag;
+    flex: 9 1 auto;
+    text-align: center;
+    color: white;
+    font-size: 14px;
+    user-select: none;
+    padding: 0 8px;
+  }
+  
+  .window-controls {
+    display: flex;
+  }
+  
+  .window-controls button {
+    -webkit-app-region: no-drag;
+    border: none;
+    background: transparent;
+    width: 46px;
+    height: 32px;
+    font-size: 12px;
+    cursor: pointer;
+    color: #D5D5D5;
+  }
+  
+  /* .window-controls button:hover {
+    background: rgba(255, 255, 255, 0.1);
+  } */
+  
+  .button1:hover{
+    background-color: #343a40;
+  }
+
+  .button2:hover{
+    background-color: #C51E1D;
+  }
+  

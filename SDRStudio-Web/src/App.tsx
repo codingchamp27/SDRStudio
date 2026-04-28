@@ -419,121 +419,49 @@ function PresetsModal({ onClose, deviceSetCount }: { onClose: () => void; device
             <button className="sdr-btn success" onClick={handleSave}>💾 Save</button>
           </div>
         </div>
+import { useState, useEffect, useCallback } from 'react';
+import './index.css';
+import { Navbar } from './components/Navbar';
+import { Sidebar } from './components/Sidebar';
+import { Dashboard } from './components/Dashboard';
+import { DevicesView } from './components/DevicesView';
+import { ChannelsView } from './components/ChannelsView';
+import { SpectrumPanel } from './components/SpectrumPanel';
+import { getInstanceSummary, type InstanceSummary } from './api';
+import { Radio, GitBranch, ExternalLink } from 'lucide-react';
+
+const About = () => (
+  <div style={{ padding: 32, display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 600, animation: 'fadeInUp 0.35s ease' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+      <div style={{
+        width: 52, height: 52,
+        background: 'linear-gradient(135deg, #00d4ff, #0066aa)',
+        borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        boxShadow: '0 0 20px rgba(0,212,255,0.4)',
+      }}>
+        <Radio size={26} color="#000" />
+      </div>
+      <div>
+        <h1 style={{ fontSize: 24, fontWeight: 700 }}>SDRStudio</h1>
+        <p style={{ fontSize: 13, color: '#4a5a7a' }}>Custom SDR Control Dashboard</p>
       </div>
     </div>
-  );
-}
-
-// ─── FEATURE SIDEBAR ──────────────────────────────────────────────────────────
-interface ActiveFeature { id: string; title: string; featureType: string; running: boolean; }
-
-function FeatureSidebar({ onClose }: { onClose: () => void }) {
-  const { toast } = useToast();
-  const [catalog, setCatalog] = useState<Array<{ id: string; name: string; version: string }>>([]);
-  const [active, setActive] = useState<ActiveFeature[]>([]);
-  const [selectedCatalog, setSelectedCatalog] = useState('');
-
-  const refresh = () => {
-    SdrService.getAvailableFeatures()
-      .then(data => setCatalog(data || []))
-      .catch(() => setCatalog([]));
-    SdrService.getFeatureSet()
-      .then(data => {
-        const features = (data?.features || []).map((f: any, i: number) => ({
-          id: String(i),
-          title: f.title || f.featureType,
-          featureType: f.featureType,
-          running: f.state === 1 || f.state === 'running',
-        }));
-        setActive(features);
-      })
-      .catch(() => setActive([]));
-  };
-
-  useEffect(() => { refresh(); }, []);
-
-  const handleAdd = async () => {
-    if (!selectedCatalog) return toast('Select a feature first', 'warning');
-    try {
-      await SdrService.addFeature(selectedCatalog);
-      toast(`Feature "${selectedCatalog}" added`, 'success');
-      refresh();
-    } catch { toast('Failed to add feature (backend may be offline)', 'error'); }
-  };
-
-  const handleToggleRun = async (f: ActiveFeature) => {
-    // Optimistic UI update for immediate response
-    setActive(prev => prev.map(p => p.id === f.id ? { ...p, running: !f.running } : p));
-    try {
-      await SdrService.runFeature(Number(f.id), !f.running);
-      toast(`Feature ${f.running ? 'stopped' : 'started'}`, 'info');
-      refresh();
-    } catch {
-      // Revert optimistic update on failure
-      setActive(prev => prev.map(p => p.id === f.id ? { ...p, running: f.running } : p));
-      toast('Failed to toggle feature state', 'error');
-    }
-  };
-
-  const handleDelete = async (f: ActiveFeature) => {
-    try {
-      await SdrService.deleteFeature(Number(f.id));
-      toast(`Feature "${f.featureType}" removed`, 'info');
-      refresh();
-    } catch { toast('Failed to delete feature', 'error'); }
-  };
-
-  return (
-    <div className="feature-sidebar">
-      <div className="channel-header" style={{ background: 'rgba(155, 89, 182, 0.25)' }}>
-        <span style={{ fontWeight: 700 }}>⚙ Features</span>
-        <button className="sdr-btn" onClick={onClose} style={{ marginLeft: 'auto' }}>✖</button>
-      </div>
-
-      {/* Catalog picker */}
-      <div style={{ padding: '12px', borderBottom: '1px solid var(--border-color)', display: 'flex', gap: '8px', alignItems: 'center' }}>
-        <select
-          value={selectedCatalog}
-          onChange={e => setSelectedCatalog(e.target.value)}
-          style={{ flex: 1, background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: '#fff', fontSize: '13px', padding: '6px 10px', borderRadius: '4px', outline: 'none' }}
-        >
-          <option value="">Select feature plugin…</option>
-          {catalog.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          {catalog.length === 0 && <option disabled>Backend offline</option>}
-        </select>
-        <button className="sdr-btn" onClick={handleAdd} style={{ background: 'rgba(46, 213, 115, 0.15)', color: '#2ed573', border: '1px solid rgba(46,213,115,0.4)', borderRadius: '4px', padding: '6px 12px', fontWeight: 'bold' }}>✚ Add</button>
-      </div>
-
-      {/* Active features list */}
-      <div style={{ flex: 1, overflowY: 'auto' }}>
-        {active.length === 0 && (
-          <div style={{ padding: '16px', color: '#555', fontSize: '12px', textAlign: 'center' }}>
-            No features active.<br />Add one from the list above.
-          </div>
-        )}
-        {active.map(f => (
-          <div key={f.id} className="channel-card" style={{ margin: '8px', padding: 0, border: '1px solid var(--border-color)', borderRadius: '6px', overflow: 'hidden' }}>
-            <div className="channel-header" style={{ background: f.running ? 'rgba(46,213,115,0.15)' : 'rgba(255,255,255,0.05)', padding: '8px 10px', display: 'flex', alignItems: 'center' }}>
-              <span style={{ fontWeight: 600, fontSize: '13px', color: '#fff' }}>F:{f.id} <span style={{color: '#ddd', fontWeight: 400}}>{f.title}</span></span>
-              <div className="navbar-group" style={{ marginLeft: 'auto', display: 'flex', gap: '6px' }}>
-                <button
-                  className="sdr-btn"
-                  style={{ 
-                    color: f.running ? '#fff' : '#aaa', 
-                    background: f.running ? 'rgba(255, 107, 107, 0.8)' : 'rgba(46, 213, 115, 0.8)',
-                    padding: '4px 10px', borderRadius: '4px', border: 'none', fontSize: '12px', fontWeight: 'bold'
-                  }}
-                  onClick={() => handleToggleRun(f)}
-                  title={f.running ? 'Stop Feature' : 'Start Feature'}
-                >
-                  {f.running ? '⏹ Stop' : '▶ Start'}
-                </button>
-                <button className="sdr-btn" style={{ color: '#ff6b6b', background: 'rgba(255,107,107,0.1)', border: '1px solid rgba(255,107,107,0.3)', padding: '4px 8px', borderRadius: '4px' }} onClick={() => handleDelete(f)} title="Delete">✖</button>
-              </div>
-            </div>
-            <div style={{ padding: '8px 10px', fontSize: '11px', color: '#aaa', background: 'rgba(0,0,0,0.2)' }}>
-              Plugin: <span style={{ color: '#fff' }}>{f.featureType}</span>
-            </div>
+    <div className="glass-card" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <p style={{ fontSize: 13, color: '#8899bb', lineHeight: 1.7 }}>
+        SDRStudio is a modern web-based control interface for the <strong style={{ color: '#e8f0fe' }}>SDRangel</strong> backend.
+        It communicates entirely via the SDRangel REST API at <code style={{ color: '#00d4ff', fontFamily: 'JetBrains Mono, monospace', fontSize: 12 }}>http://localhost:8091</code>.
+      </p>
+      <div className="divider" />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {[
+          ['Backend',  'SDRangel (C++ / Qt5)'],
+          ['Frontend', 'React 19 + Vite + TypeScript'],
+          ['Hardware', 'NI-USRP (via UHD), and 20+ other SDR devices'],
+          ['API',      'SDRangel REST API (Swagger)'],
+        ].map(([k, v]) => (
+          <div key={k} style={{ display: 'flex', gap: 12 }}>
+            <span style={{ fontSize: 12, color: '#4a5a7a', width: 80, flexShrink: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{k}</span>
+            <span style={{ fontSize: 13, color: '#e8f0fe', fontFamily: 'JetBrains Mono, monospace' }}>{v}</span>
           </div>
         ))}
       </div>
@@ -1238,6 +1166,53 @@ function DeviceSidebarCard({ idx, ds, onAddChannel }: { idx: number, ds: DeviceS
     } catch (e) {
       setOptimisticState(null);
       toast("Failed to toggle DSP engine state", "error");
+      <div className="divider" />
+      <div style={{ display: 'flex', gap: 10 }}>
+        <a href="https://github.com/f4exb/sdrangel" target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm">
+          <GitBranch size={13} /> SDRangel GitHub
+        </a>
+        <a href="https://github.com/f4exb/sdrangel/wiki" target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm">
+          <ExternalLink size={13} /> Wiki
+        </a>
+      </div>
+    </div>
+  </div>
+);
+
+function App() {
+  const [view, setView] = useState('dashboard');
+  const [connected, setConnected] = useState(false);
+  const [version, setVersion] = useState('');
+  const [latency, setLatency] = useState<number | null>(null);
+
+  const poll = useCallback(async () => {
+    const t0 = Date.now();
+    try {
+      const data: InstanceSummary = await getInstanceSummary();
+      setConnected(true);
+      setVersion(data.version ?? '');
+      setLatency(Date.now() - t0);
+    } catch {
+      setConnected(false);
+      setLatency(null);
+    }
+  }, []);
+
+  // Poll every 4 seconds
+  useEffect(() => {
+    poll();
+    const id = setInterval(poll, 4000);
+    return () => clearInterval(id);
+  }, [poll]);
+
+  const renderView = () => {
+    switch (view) {
+      case 'dashboard': return <Dashboard connected={connected} />;
+      case 'devices':   return <DevicesView />;
+      case 'channels':  return <ChannelsView />;
+      case 'spectrum':  return <SpectrumPanel connected={connected} />;
+      case 'about':     return <About />;
+      default:          return <Dashboard connected={connected} />;
     }
   };
 
@@ -1349,6 +1324,14 @@ function DeviceSidebarCard({ idx, ds, onAddChannel }: { idx: number, ds: DeviceS
       {isExpanded && hwSettings && (
         <DynamicSettingsEditor settings={hwSettings} onChange={patchSetting} />
       )}
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+      <Navbar connected={connected} version={version} latency={latency} />
+      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+        <Sidebar active={view} onNavigate={setView} />
+        <main style={{ flex: 1, overflow: 'auto', background: 'radial-gradient(ellipse at top left, rgba(0,100,150,0.06) 0%, transparent 60%)' }}>
+          {renderView()}
+        </main>
+      </div>
     </div>
   );
 }
@@ -1859,3 +1842,4 @@ export default function App() {
     </ToastProvider>
   );
 }
+export default App;

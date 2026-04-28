@@ -1,0 +1,137 @@
+.container{
+    width: 100%;
+    height: 100%;
+    color :white;
+    background-color: rgb(1, 17, 32,0.72);
+    border-radius: 22px;
+    
+    padding: 10px 20px;
+}
+
+.header {
+    padding: 5px 10px;
+    display: flex;
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.heading {
+    font-size: 22px;
+    display: flex;
+    align-items: center;
+}
+
+.right{
+    display: flex;
+    flex-direction: row;
+    width: 35%;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.clear{
+    padding: 5px 10px;
+    width: 44%;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-around;
+    align-items: center;
+    background-color: #0D2B46;
+    border-radius: 13px;
+    cursor: pointer;
+    user-select: none;
+    transition: transform 0.2s;
+}
+.clear:active{
+    transform: scale(0.8);
+}
+
+.download{
+    padding: 5px 10px;
+    width: 44%;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-around;
+    align-items: center;
+    background-color: #0D2B46;
+    border-radius: 13px;
+    cursor: pointer;
+    user-select: none;
+    transition: transform 0.2s;
+}
+.download:active{
+    transform: scale(0.8);
+}
+
+.cltext{
+    font-size: 13px;
+    color: #afaeae;
+}
+
+.clicon{
+    display: flex;
+    align-items: center;
+    font-size: 22px;
+    color: rgb(230, 230, 230);
+}
+
+.body {
+    width: 100%;
+    padding: 10px 20px;
+    overflow-y: auto;
+    max-height: 30vh;
+    color: rgb(204, 206, 205);
+}
+
+.body::-webkit-scrollbar {
+    width: 3px;
+}
+
+.body::-webkit-scrollbar-track {
+    background: #1a1919;
+    border-radius: 4px;
+}
+
+.body::-webkit-scrollbar-thumb {
+    background-color: #888;
+    border-radius: 4px;
+}
+
+.body::-webkit-scrollbar-thumb:hover {
+    background-color: #a0a0a0;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.phead{
+    margin-top: 9px;
+    width: 60%;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    
+}
+
+.pdate{
+    font-size: 12px;
+    width: 10vw;
+}
+
+.ptext{
+    font-size: 13.5px;
+    font-weight: 700;
+    margin-left: 2vw;
+}
+
+.pbody{
+    margin: 9px 0px;
+}
+
+.divider {
+    width: 100%;
+    height: 2px;
+    background-color: rgb(41, 40, 40);
+}
+

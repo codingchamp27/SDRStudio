@@ -1,0 +1,200 @@
+[INFO] [B200] Asking for clock rate 16.000000 MHz... 
+[INFO] [B200] Actually got clock rate 16.000000 MHz.
+2026-04-12 16:38:42.987 (C) USRPOutput::applySettings: could not set clock to  "internal"
+2026-04-12 16:38:42.991 (W) USRPOutput::networkManagerFinished:  error( 1 ):  QNetworkReply::ConnectionRefusedError :  "Connection refused"
+[INFO] [B200] Asking for clock rate 48.000000 MHz... 
+[INFO] [B200] Actually got clock rate 48.000000 MHz.
+2026-04-12 16:38:43.471 (W) DVB data bitrate is lower than the bitrate of the MPEG transport stream
+2026-04-12 16:40:06.542 (W) DVB data bitrate is lower than the bitrate of the MPEG transport stream
+U[ERROR] [UHD] An unexpected exception was caught in a task loop.The task loop will now exit, things may not work.EnvironmentError: IOError: usb rx8 transfer status: LIBUSB_TRANSFER_NO_DEVICE
+terminate called after throwing an instance of 'uhd::usb_error'
+  what():  RuntimeError: USBError -4: usb tx4 submit failed: LIBUSB_ERROR_NO_DEVICE
+Aborted (core dumped)
+2026-04-12 16:46:46.833 (I) SDRangelSrv 7.22.7 Qt 5.15.3 64b x86_64 Ubuntu 22.04.5 LTS DSP Rx:24b Tx:16b PID 55111
+2026-04-12 16:46:46.833 (I) MainSettings::MainSettings: settings file: format: 0 location: /home/iitr/.config/f4exb/SDRangelSrv.conf
+2026-04-12 16:46:47.105 (I) PluginManager::loadPluginsDir: loaded plugin libantennatoolssrv.so
+2026-04-12 16:46:47.106 (I) PluginManager::loadPluginsDir: loaded plugin libaprssrv.so
+2026-04-12 16:46:47.106 (I) PluginManager::loadPluginsDir: loaded plugin libbeamsteeringcwmodsrv.so
+2026-04-12 16:46:47.106 (I) PluginManager::loadPluginsDir: loaded plugin libchannelpowersrv.so
+2026-04-12 16:46:47.106 (I) PluginManager::loadPluginsDir: loaded plugin libdemodadsbsrv.so
+2026-04-12 16:46:47.107 (I) PluginManager::loadPluginsDir: loaded plugin libdemodaissrv.so
+2026-04-12 16:46:47.107 (I) PluginManager::loadPluginsDir: loaded plugin libdemodamsrv.so
+2026-04-12 16:46:47.107 (I) PluginManager::loadPluginsDir: loaded plugin libdemodbfmsrv.so
+2026-04-12 16:46:47.107 (I) PluginManager::loadPluginsDir: loaded plugin libdemodchirpchatsrv.so
+2026-04-12 16:46:47.108 (I) PluginManager::loadPluginsDir: loaded plugin libdemoddatvsrv.so
+2026-04-12 16:46:47.108 (I) PluginManager::loadPluginsDir: loaded plugin libdemoddscsrv.so
+2026-04-12 16:46:47.108 (I) PluginManager::loadPluginsDir: loaded plugin libdemodendoftrainsrv.so
+2026-04-12 16:46:47.109 (I) PluginManager::loadPluginsDir: loaded plugin libdemodft8srv.so
+2026-04-12 16:46:47.109 (I) PluginManager::loadPluginsDir: loaded plugin libdemodilssrv.so
+2026-04-12 16:46:47.109 (I) PluginManager::loadPluginsDir: loaded plugin libdemodnavtexsrv.so
+2026-04-12 16:46:47.109 (I) PluginManager::loadPluginsDir: loaded plugin libdemodnfmsrv.so
+2026-04-12 16:46:47.109 (I) PluginManager::loadPluginsDir: loaded plugin libdemodpacketsrv.so
+2026-04-12 16:46:47.110 (I) PluginManager::loadPluginsDir: loaded plugin libdemodpagersrv.so
+2026-04-12 16:46:47.110 (I) PluginManager::loadPluginsDir: loaded plugin libdemodradiosondesrv.so
+2026-04-12 16:46:47.110 (I) PluginManager::loadPluginsDir: loaded plugin libdemodrttysrv.so
+2026-04-12 16:46:47.110 (I) PluginManager::loadPluginsDir: loaded plugin libdemodssbsrv.so
+2026-04-12 16:46:47.111 (I) PluginManager::loadPluginsDir: loaded plugin libdemodvorsrv.so
+2026-04-12 16:46:47.111 (I) PluginManager::loadPluginsDir: loaded plugin libdemodwfmsrv.so
+2026-04-12 16:46:47.111 (I) PluginManager::loadPluginsDir: loaded plugin libdoa2srv.so
+2026-04-12 16:46:47.111 (I) PluginManager::loadPluginsDir: loaded plugin libfeatureafcsrv.so
+2026-04-12 16:46:47.111 (I) PluginManager::loadPluginsDir: loaded plugin libfeatureaissrv.so
+2026-04-12 16:46:47.112 (I) PluginManager::loadPluginsDir: loaded plugin libfeaturedemodanalyzersrv.so
+2026-04-12 16:46:47.112 (I) PluginManager::loadPluginsDir: loaded plugin libfeaturegs232controllersrv.so
+2026-04-12 16:46:47.112 (I) PluginManager::loadPluginsDir: loaded plugin libfeaturepertestersrv.so
+2026-04-12 16:46:47.112 (I) PluginManager::loadPluginsDir: loaded plugin libfeatureradiosondesrv.so
+2026-04-12 16:46:47.113 (I) PluginManager::loadPluginsDir: loaded plugin libfeatureremotecontrolsrv.so
+2026-04-12 16:46:47.113 (I) PluginManager::loadPluginsDir: loaded plugin libfeaturerigctlserversrv.so
+2026-04-12 16:46:47.113 (I) PluginManager::loadPluginsDir: loaded plugin libfeaturesidsrv.so
+2026-04-12 16:46:47.113 (I) PluginManager::loadPluginsDir: loaded plugin libfeaturesimplepttsrv.so
+2026-04-12 16:46:47.113 (I) PluginManager::loadPluginsDir: loaded plugin libfeatureskymapsrv.so
+2026-04-12 16:46:47.114 (I) PluginManager::loadPluginsDir: loaded plugin libfeaturestartrackersrv.so
+2026-04-12 16:46:47.114 (I) PluginManager::loadPluginsDir: loaded plugin libfilesinksrv.so
+2026-04-12 16:46:47.114 (I) PluginManager::loadPluginsDir: loaded plugin libfilesourcesrv.so
+2026-04-12 16:46:47.114 (I) PluginManager::loadPluginsDir: loaded plugin libfreqscannersrv.so
+2026-04-12 16:46:47.115 (I) PluginManager::loadPluginsDir: loaded plugin libfreqtrackersrv.so
+2026-04-12 16:46:47.115 (I) PluginManager::loadPluginsDir: loaded plugin libinputaaroniartsasrv.so
+2026-04-12 16:46:47.115 (I) PluginManager::loadPluginsDir: loaded plugin libinputaudiosrv.so
+2026-04-12 16:46:47.115 (I) PluginManager::loadPluginsDir: loaded plugin libinputfileinputsrv.so
+2026-04-12 16:46:47.116 (I) PluginManager::loadPluginsDir: loaded plugin libinputkiwisdrsrv.so
+2026-04-12 16:46:47.116 (I) PluginManager::loadPluginsDir: loaded plugin libinputlocalsrv.so
+2026-04-12 16:46:47.116 (I) PluginManager::loadPluginsDir: loaded plugin libinputtcpremotesrv.so
+2026-04-12 16:46:47.116 (I) PluginManager::loadPluginsDir: loaded plugin libinputtestsourcesrv.so
+2026-04-12 16:46:47.120 (I) PluginManager::loadPluginsDir: loaded plugin libinputusrpsrv.so
+2026-04-12 16:46:47.120 (I) PluginManager::loadPluginsDir: loaded plugin liblocalsinksrv.so
+2026-04-12 16:46:47.121 (I) PluginManager::loadPluginsDir: loaded plugin liblocalsourcesrv.so
+2026-04-12 16:46:47.121 (I) PluginManager::loadPluginsDir: loaded plugin libmapsrv.so
+2026-04-12 16:46:47.122 (I) PluginManager::loadPluginsDir: loaded plugin libmimometismisosrv.so
+2026-04-12 16:46:47.122 (I) PluginManager::loadPluginsDir: loaded plugin libmimotestmisrv.so
+2026-04-12 16:46:47.122 (I) PluginManager::loadPluginsDir: loaded plugin libmodaissrv.so
+2026-04-12 16:46:47.122 (I) PluginManager::loadPluginsDir: loaded plugin libmodamsrv.so
+2026-04-12 16:46:47.123 (I) PluginManager::loadPluginsDir: loaded plugin libmodchirpchatsrv.so
+2026-04-12 16:46:47.134 (I) PluginManager::loadPluginsDir: loaded plugin libmoddatvsrv.so
+2026-04-12 16:46:47.134 (I) PluginManager::loadPluginsDir: loaded plugin libmodieee_802_15_4srv.so
+2026-04-12 16:46:47.135 (I) PluginManager::loadPluginsDir: loaded plugin libmodnfmsrv.so
+2026-04-12 16:46:47.135 (I) PluginManager::loadPluginsDir: loaded plugin libmodpacketsrv.so
+2026-04-12 16:46:47.135 (I) PluginManager::loadPluginsDir: loaded plugin libmodpsk31srv.so
+2026-04-12 16:46:47.135 (I) PluginManager::loadPluginsDir: loaded plugin libmodrttysrv.so
+2026-04-12 16:46:47.136 (I) PluginManager::loadPluginsDir: loaded plugin libmodssbsrv.so
+2026-04-12 16:46:47.136 (I) PluginManager::loadPluginsDir: loaded plugin libmodwfmsrv.so
+2026-04-12 16:46:47.136 (I) PluginManager::loadPluginsDir: loaded plugin libnoisefiguresrv.so
+2026-04-12 16:46:47.136 (I) PluginManager::loadPluginsDir: loaded plugin liboutputaaroniartsasrv.so
+2026-04-12 16:46:47.136 (I) PluginManager::loadPluginsDir: loaded plugin liboutputaudiosrv.so
+2026-04-12 16:46:47.137 (I) PluginManager::loadPluginsDir: loaded plugin liboutputfileoutputsrv.so
+2026-04-12 16:46:47.137 (I) PluginManager::loadPluginsDir: loaded plugin liboutputlocalsrv.so
+2026-04-12 16:46:47.137 (I) PluginManager::loadPluginsDir: loaded plugin liboutputtestmosyncsrv.so
+2026-04-12 16:46:47.137 (I) PluginManager::loadPluginsDir: loaded plugin liboutputtestsinksrv.so
+2026-04-12 16:46:47.138 (I) PluginManager::loadPluginsDir: loaded plugin liboutputusrpsrv.so
+2026-04-12 16:46:47.138 (I) PluginManager::loadPluginsDir: loaded plugin libradioastronomysrv.so
+2026-04-12 16:46:47.138 (I) PluginManager::loadPluginsDir: loaded plugin libradioclocksrv.so
+2026-04-12 16:46:47.139 (I) PluginManager::loadPluginsDir: loaded plugin libremotetcpsinksrv.so
+2026-04-12 16:46:47.139 (I) PluginManager::loadPluginsDir: loaded plugin libudpsinksrv.so
+2026-04-12 16:46:47.139 (I) PluginManager::loadPluginsDir: loaded plugin libudpsourcesrv.so
+2026-04-12 16:46:47.140 (I) PluginManager::loadPluginsDir: loaded plugin libvorlocalizersrv.so
+2026-04-12 16:46:47.140 (I) PluginManager::loadPluginsDir: loaded plugin libwdsprxsrv.so
+[INFO] [UHD] linux; GNU C++ version 11.2.0; Boost_107400; UHD_4.1.0.5-3
+[INFO] [B200] Loading firmware image: /usr/share/uhd/images/usrp_b200_fw.hex...
+2026-04-12 16:46:50.112 (C) Unable to start the client: "org.freedesktop.DBus.Error.AccessDenied" "Geolocation disabled for UID 1000"
+2026-04-12 16:46:50.112 (W) MainCore::positionError:  0
+2026-04-12 16:46:50.632 (I) WebAPIServer::start: starting web API server at http://0.0.0.0:8091
+quit the application by signal(15).
+2026-04-12 16:47:55.533 (I) WebAPIServer::stop: stopped web API server at http://0.0.0.0:8091
+SDRangel quit.
+2026-04-12 16:47:58.565 (I) SDRangelSrv 7.22.7 Qt 5.15.3 64b x86_64 Ubuntu 22.04.5 LTS DSP Rx:24b Tx:16b PID 55422
+2026-04-12 16:47:58.565 (I) MainSettings::MainSettings: settings file: format: 0 location: /home/iitr/.config/f4exb/SDRangelSrv.conf
+2026-04-12 16:47:58.822 (I) PluginManager::loadPluginsDir: loaded plugin libantennatoolssrv.so
+2026-04-12 16:47:58.823 (I) PluginManager::loadPluginsDir: loaded plugin libaprssrv.so
+2026-04-12 16:47:58.823 (I) PluginManager::loadPluginsDir: loaded plugin libbeamsteeringcwmodsrv.so
+2026-04-12 16:47:58.823 (I) PluginManager::loadPluginsDir: loaded plugin libchannelpowersrv.so
+2026-04-12 16:47:58.823 (I) PluginManager::loadPluginsDir: loaded plugin libdemodadsbsrv.so
+2026-04-12 16:47:58.824 (I) PluginManager::loadPluginsDir: loaded plugin libdemodaissrv.so
+2026-04-12 16:47:58.824 (I) PluginManager::loadPluginsDir: loaded plugin libdemodamsrv.so
+2026-04-12 16:47:58.824 (I) PluginManager::loadPluginsDir: loaded plugin libdemodbfmsrv.so
+2026-04-12 16:47:58.824 (I) PluginManager::loadPluginsDir: loaded plugin libdemodchirpchatsrv.so
+2026-04-12 16:47:58.825 (I) PluginManager::loadPluginsDir: loaded plugin libdemoddatvsrv.so
+2026-04-12 16:47:58.825 (I) PluginManager::loadPluginsDir: loaded plugin libdemoddscsrv.so
+2026-04-12 16:47:58.825 (I) PluginManager::loadPluginsDir: loaded plugin libdemodendoftrainsrv.so
+2026-04-12 16:47:58.826 (I) PluginManager::loadPluginsDir: loaded plugin libdemodft8srv.so
+2026-04-12 16:47:58.826 (I) PluginManager::loadPluginsDir: loaded plugin libdemodilssrv.so
+2026-04-12 16:47:58.826 (I) PluginManager::loadPluginsDir: loaded plugin libdemodnavtexsrv.so
+2026-04-12 16:47:58.826 (I) PluginManager::loadPluginsDir: loaded plugin libdemodnfmsrv.so
+2026-04-12 16:47:58.826 (I) PluginManager::loadPluginsDir: loaded plugin libdemodpacketsrv.so
+2026-04-12 16:47:58.827 (I) PluginManager::loadPluginsDir: loaded plugin libdemodpagersrv.so
+2026-04-12 16:47:58.827 (I) PluginManager::loadPluginsDir: loaded plugin libdemodradiosondesrv.so
+2026-04-12 16:47:58.827 (I) PluginManager::loadPluginsDir: loaded plugin libdemodrttysrv.so
+2026-04-12 16:47:58.827 (I) PluginManager::loadPluginsDir: loaded plugin libdemodssbsrv.so
+2026-04-12 16:47:58.828 (I) PluginManager::loadPluginsDir: loaded plugin libdemodvorsrv.so
+2026-04-12 16:47:58.828 (I) PluginManager::loadPluginsDir: loaded plugin libdemodwfmsrv.so
+2026-04-12 16:47:58.828 (I) PluginManager::loadPluginsDir: loaded plugin libdoa2srv.so
+2026-04-12 16:47:58.828 (I) PluginManager::loadPluginsDir: loaded plugin libfeatureafcsrv.so
+2026-04-12 16:47:58.828 (I) PluginManager::loadPluginsDir: loaded plugin libfeatureaissrv.so
+2026-04-12 16:47:58.829 (I) PluginManager::loadPluginsDir: loaded plugin libfeaturedemodanalyzersrv.so
+2026-04-12 16:47:58.829 (I) PluginManager::loadPluginsDir: loaded plugin libfeaturegs232controllersrv.so
+2026-04-12 16:47:58.829 (I) PluginManager::loadPluginsDir: loaded plugin libfeaturepertestersrv.so
+2026-04-12 16:47:58.830 (I) PluginManager::loadPluginsDir: loaded plugin libfeatureradiosondesrv.so
+2026-04-12 16:47:58.830 (I) PluginManager::loadPluginsDir: loaded plugin libfeatureremotecontrolsrv.so
+2026-04-12 16:47:58.830 (I) PluginManager::loadPluginsDir: loaded plugin libfeaturerigctlserversrv.so
+2026-04-12 16:47:58.830 (I) PluginManager::loadPluginsDir: loaded plugin libfeaturesidsrv.so
+2026-04-12 16:47:58.830 (I) PluginManager::loadPluginsDir: loaded plugin libfeaturesimplepttsrv.so
+2026-04-12 16:47:58.831 (I) PluginManager::loadPluginsDir: loaded plugin libfeatureskymapsrv.so
+2026-04-12 16:47:58.831 (I) PluginManager::loadPluginsDir: loaded plugin libfeaturestartrackersrv.so
+2026-04-12 16:47:58.831 (I) PluginManager::loadPluginsDir: loaded plugin libfilesinksrv.so
+2026-04-12 16:47:58.831 (I) PluginManager::loadPluginsDir: loaded plugin libfilesourcesrv.so
+2026-04-12 16:47:58.832 (I) PluginManager::loadPluginsDir: loaded plugin libfreqscannersrv.so
+2026-04-12 16:47:58.832 (I) PluginManager::loadPluginsDir: loaded plugin libfreqtrackersrv.so
+2026-04-12 16:47:58.832 (I) PluginManager::loadPluginsDir: loaded plugin libinputaaroniartsasrv.so
+2026-04-12 16:47:58.832 (I) PluginManager::loadPluginsDir: loaded plugin libinputaudiosrv.so
+2026-04-12 16:47:58.833 (I) PluginManager::loadPluginsDir: loaded plugin libinputfileinputsrv.so
+2026-04-12 16:47:58.833 (I) PluginManager::loadPluginsDir: loaded plugin libinputkiwisdrsrv.so
+2026-04-12 16:47:58.833 (I) PluginManager::loadPluginsDir: loaded plugin libinputlocalsrv.so
+2026-04-12 16:47:58.833 (I) PluginManager::loadPluginsDir: loaded plugin libinputtcpremotesrv.so
+2026-04-12 16:47:58.834 (I) PluginManager::loadPluginsDir: loaded plugin libinputtestsourcesrv.so
+2026-04-12 16:47:58.838 (I) PluginManager::loadPluginsDir: loaded plugin libinputusrpsrv.so
+2026-04-12 16:47:58.838 (I) PluginManager::loadPluginsDir: loaded plugin liblocalsinksrv.so
+2026-04-12 16:47:58.838 (I) PluginManager::loadPluginsDir: loaded plugin liblocalsourcesrv.so
+2026-04-12 16:47:58.839 (I) PluginManager::loadPluginsDir: loaded plugin libmapsrv.so
+2026-04-12 16:47:58.839 (I) PluginManager::loadPluginsDir: loaded plugin libmimometismisosrv.so
+2026-04-12 16:47:58.839 (I) PluginManager::loadPluginsDir: loaded plugin libmimotestmisrv.so
+2026-04-12 16:47:58.840 (I) PluginManager::loadPluginsDir: loaded plugin libmodaissrv.so
+2026-04-12 16:47:58.840 (I) PluginManager::loadPluginsDir: loaded plugin libmodamsrv.so
+2026-04-12 16:47:58.840 (I) PluginManager::loadPluginsDir: loaded plugin libmodchirpchatsrv.so
+2026-04-12 16:47:58.852 (I) PluginManager::loadPluginsDir: loaded plugin libmoddatvsrv.so
+2026-04-12 16:47:58.852 (I) PluginManager::loadPluginsDir: loaded plugin libmodieee_802_15_4srv.so
+2026-04-12 16:47:58.852 (I) PluginManager::loadPluginsDir: loaded plugin libmodnfmsrv.so
+2026-04-12 16:47:58.852 (I) PluginManager::loadPluginsDir: loaded plugin libmodpacketsrv.so
+2026-04-12 16:47:58.853 (I) PluginManager::loadPluginsDir: loaded plugin libmodpsk31srv.so
+2026-04-12 16:47:58.853 (I) PluginManager::loadPluginsDir: loaded plugin libmodrttysrv.so
+2026-04-12 16:47:58.853 (I) PluginManager::loadPluginsDir: loaded plugin libmodssbsrv.so
+2026-04-12 16:47:58.853 (I) PluginManager::loadPluginsDir: loaded plugin libmodwfmsrv.so
+2026-04-12 16:47:58.854 (I) PluginManager::loadPluginsDir: loaded plugin libnoisefiguresrv.so
+2026-04-12 16:47:58.854 (I) PluginManager::loadPluginsDir: loaded plugin liboutputaaroniartsasrv.so
+2026-04-12 16:47:58.854 (I) PluginManager::loadPluginsDir: loaded plugin liboutputaudiosrv.so
+2026-04-12 16:47:58.854 (I) PluginManager::loadPluginsDir: loaded plugin liboutputfileoutputsrv.so
+2026-04-12 16:47:58.854 (I) PluginManager::loadPluginsDir: loaded plugin liboutputlocalsrv.so
+2026-04-12 16:47:58.855 (I) PluginManager::loadPluginsDir: loaded plugin liboutputtestmosyncsrv.so
+2026-04-12 16:47:58.855 (I) PluginManager::loadPluginsDir: loaded plugin liboutputtestsinksrv.so
+2026-04-12 16:47:58.855 (I) PluginManager::loadPluginsDir: loaded plugin liboutputusrpsrv.so
+2026-04-12 16:47:58.856 (I) PluginManager::loadPluginsDir: loaded plugin libradioastronomysrv.so
+2026-04-12 16:47:58.856 (I) PluginManager::loadPluginsDir: loaded plugin libradioclocksrv.so
+2026-04-12 16:47:58.856 (I) PluginManager::loadPluginsDir: loaded plugin libremotetcpsinksrv.so
+2026-04-12 16:47:58.856 (I) PluginManager::loadPluginsDir: loaded plugin libudpsinksrv.so
+2026-04-12 16:47:58.857 (I) PluginManager::loadPluginsDir: loaded plugin libudpsourcesrv.so
+2026-04-12 16:47:58.857 (I) PluginManager::loadPluginsDir: loaded plugin libvorlocalizersrv.so
+2026-04-12 16:47:58.857 (I) PluginManager::loadPluginsDir: loaded plugin libwdsprxsrv.so
+[INFO] [UHD] linux; GNU C++ version 11.2.0; Boost_107400; UHD_4.1.0.5-3
+2026-04-12 16:47:59.366 (C) Unable to start the client: "org.freedesktop.DBus.Error.AccessDenied" "Geolocation disabled for UID 1000"
+2026-04-12 16:47:59.366 (W) MainCore::positionError:  0
+2026-04-12 16:47:59.839 (I) WebAPIServer::start: starting web API server at http://0.0.0.0:8091
+[INFO] [B200] Detected Device: B210
+[INFO] [B200] Loading FPGA image: /usr/share/uhd/images/usrp_b210_fpga.bin...
+[INFO] [B200] Operating over USB 3.
+[INFO] [B200] Detecting internal GPSDO.... 
+[INFO] [GPS] No GPSDO found
+[INFO] [B200] Initialize CODEC control...
+[INFO] [B200] Initialize Radio control...
+[INFO] [B200] Performing register loopback test... 
+[INFO] [B200] Register loopback test passed
+[INFO] [B200] Performing register loopback test... 
+[INFO] [B200] Register loopback test passed
+[INFO] [B200] Setting master clock rate selection to 'automatic'.
+[INFO] [B200] Asking for clock rate 16.000000 MHz... 
+[INFO] [B200] Actually got clock rate 16.000000 MHz.
