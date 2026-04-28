@@ -111,6 +111,20 @@ export default defineConfig({
           }
         });
 
+        server.middlewares.use('/api/browse', async (req, res) => {
+          if (req.method !== 'POST') { res.statusCode = 405; return res.end(); }
+          const { exec } = await import('child_process');
+          // Try zenity (GNOME) or kdialog (KDE) — both return the selected path on stdout
+          const cmd = `zenity --file-selection --title="Select TS / video file" --file-filter="Media files | *.ts *.mp4 *.mpg *.mpeg *.mkv *.avi" 2>/dev/null || kdialog --getopenfilename "$HOME" "*.ts *.mp4 *.mpg *.mpeg *.mkv *.avi" 2>/dev/null`;
+          exec(cmd, (err, stdout) => {
+            res.setHeader('Content-Type', 'application/json');
+            if (err || !stdout.trim()) {
+              return res.end(JSON.stringify({ cancelled: true }));
+            }
+            res.end(JSON.stringify({ path: stdout.trim() }));
+          });
+        });
+
         server.middlewares.use('/api/upload', async (req, res) => {
           if (req.method !== 'POST') {
             res.statusCode = 405;

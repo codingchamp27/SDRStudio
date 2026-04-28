@@ -723,52 +723,61 @@ function ChannelWorkspaceCard({ dsIdx, cIdx, channel }: { dsIdx: number, cIdx: n
     syncFilePath();
   }, [dsIdx, cIdx, supportsUpload, fileNameField, playField, loopField]);
 
-  const handleUploadClick = () => fileInputRef.current?.click();
+  // ── Helper: tell SDRangel to load a file at the given absolute path ───────────
+  const applyFileToSDRangel = async (filePath: string) => {
+    const current = await SdrService.getChannelSettings(dsIdx, cIdx);
+    const key = Object.keys(current).find(k => k.endsWith('Settings'));
+    if (!key) throw new Error('Settings key not found');
 
+    const base = { channelType: current.channelType, direction: current.direction };
+
+    // Just patch the file name directly. This exactly replicates the native UI 
+    // where setting the filename pushes MsgConfigureTsFileName without changing tsSource or clearing the path.
+    await SdrService.patchChannelSettings(dsIdx, cIdx, {
+      ...base,
+      [key]: { [fileNameField]: filePath },
+    });
+  };
+
+  // ── Open native file picker (zenity) and set path directly — no file copy ─────
+  const handleUploadClick = async () => {
+    try {
+      const res = await fetch('/api/browse', { method: 'POST' });
+      const data = await res.json();
+      if (data.cancelled || !data.path) return;
+      const selectedPath: string = data.path;
+      const name = selectedPath.split('/').pop() || selectedPath;
+      setTsFilePath(selectedPath);
+      setUploadStatus({ name, path: selectedPath, status: 'done' });
+      toast(`Setting file: ${name}…`, 'info');
+      await applyFileToSDRangel(selectedPath);
+      toast(`✔ File loaded: ${name}`, 'success');
+    } catch (e: any) {
+      toast(`Failed to set file in SDRangel: ${e?.message ?? ''}`, 'error');
+    }
+  };
+
+  // ── Browser-upload fallback (triggered only when zenity is unavailable) ────────
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploadStatus({ name: file.name, path: '', status: 'uploading' });
-    toast(`Uploading ${file.name}...`, 'info');
+    toast(`Uploading ${file.name}…`, 'info');
     try {
       const response = await fetch('/api/upload', {
         method: 'POST',
         headers: { 'x-file-name': encodeURIComponent(file.name), 'Content-Type': 'application/octet-stream' },
-        body: file
+        body: file,
       });
       if (!response.ok) throw new Error('Upload failed');
-      const data = await response.json();
-      const savedPath: string = data.path;
+      const { path: savedPath } = await response.json();
       setUploadStatus({ name: file.name, path: savedPath, status: 'done' });
-
-      // ── Immediately tell SDRangel which file to use ───────────────────────────
-      try {
-        const current = await SdrService.getChannelSettings(dsIdx, cIdx);
-        const key = Object.keys(current).find(k => k.endsWith('Settings'));
-        if (key) {
-          // If the file path is the exact same, SDRangel's API diff will ignore it.
-          // We must send a dummy path first to force it to close and reopen the new file.
-          if (current[key][fileNameField] === savedPath) {
-            await SdrService.patchChannelSettings(dsIdx, cIdx, {
-              channelType: current.channelType,
-              direction: current.direction,
-              [key]: { [fileNameField]: "" },
-            });
-          }
-          await SdrService.patchChannelSettings(dsIdx, cIdx, {
-            channelType: current.channelType,
-            direction: current.direction,
-            [key]: { [fileNameField]: savedPath, [srcField]: srcVal },
-          });
-          toast(`File set: ${savedPath}`, 'success');
-        } else {
-          toast(`Uploaded. Manually set path: ${savedPath}`, 'info');
-        }
-      } catch {
-        toast(`Uploaded to ${savedPath} — could not auto-set in SDRangel`, 'warning');
-      }
-    } catch {
-      toast('Failed to upload file to backend server.', 'error');
+      setTsFilePath(savedPath);
+      toast(`Upload complete, loading file…`, 'info');
+      await applyFileToSDRangel(savedPath);
+      toast(`✔ File loaded: ${file.name}`, 'success');
+    } catch (e: any) {
+      toast(`Failed: ${e?.message ?? 'upload error'}`, 'error');
       setUploadStatus(null);
     }
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -964,10 +973,11 @@ function ChannelWorkspaceCard({ dsIdx, cIdx, channel }: { dsIdx: number, cIdx: n
                 🔁
               </button>
 
-              {uploadStatus?.status === 'done' && (
-                <span title={uploadStatus.path}
-                  style={{ fontSize: '9px', color: '#555', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                  {uploadStatus.path}
+              {tsFilePath && (
+                <span
+                  title={tsFilePath}
+                  style={{ fontSize: '9px', color: '#2ed573', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                  {tsFilePath.split('/').pop()}
                 </span>
               )}
             </div>
