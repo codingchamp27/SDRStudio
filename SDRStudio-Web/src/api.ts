@@ -124,6 +124,114 @@ export const setSpectrumServer = async (deviceSetIndex: number, run: boolean, _p
       const response = await api.delete(`/deviceset/${deviceSetIndex}/spectrum/server`);
       return response.data;
     }
+  },
+
+  // ---- FEATURES ----
+  getAvailableFeatures: async () => {
+    const response = await sdrApi.get('/features');
+    return response.data.features as Array<{ id: string; name: string; version: string }>;
+  },
+
+  getFeatureSet: async () => {
+    const response = await sdrApi.get('/featureset');
+    const data = response.data;
+    if (data && data.features) {
+       const featuresWithState = await Promise.all(data.features.map(async (f: any) => {
+         try {
+           const runRes = await sdrApi.get(`/featureset/feature/${f.index}/run`);
+           f.state = runRes.data.state;
+         } catch {
+           f.state = 'idle';
+         }
+         return f;
+       }));
+       data.features = featuresWithState;
+    }
+    return data;
+  },
+
+  addFeature: async (featureType: string) => {
+    // Correct endpoint: POST /featureset/feature  (no /0/ in path)
+    const response = await sdrApi.post('/featureset/feature', { featureType });
+    return response.data;
+  },
+
+  deleteFeature: async (featureIndex: number) => {
+    const response = await sdrApi.delete(`/featureset/feature/${featureIndex}`);
+    return response.data;
+  },
+
+  runFeature: async (featureIndex: number, start: boolean) => {
+    const response = await sdrApi.post(`/featureset/feature/${featureIndex}/run`, {
+      state: start ? 'running' : 'idle'
+    });
+    return response.data;
+  },
+
+  // ---- PRESETS ----
+  getPresets: async () => {
+    const response = await sdrApi.get('/presets');
+    return response.data.presets as Array<{ type: string; group: string; description: string; centerFrequency: number }>;
+  },
+
+  loadPreset: async (group: string, description: string, deviceSetIndex: number) => {
+    const response = await sdrApi.patch('/preset', {
+      preset: { group, description },
+      deviceSetIndex,
+    });
+    return response.data;
+  },
+
+  savePreset: async (group: string, description: string, deviceSetIndex: number) => {
+    const response = await sdrApi.put('/preset', {
+      preset: { group, description },
+      deviceSetIndex,
+    });
+    return response.data;
+  },
+
+  deletePreset: async (group: string, description: string) => {
+    const response = await sdrApi.delete('/preset', {
+      data: { preset: { group, description } }
+    });
+    return response.data;
+  },
+
+  // ---- SPECTRUM SERVER (WebSocket) ----
+  setSpectrumServer: async (deviceSetIndex: number, run: boolean, port = 8887) => {
+    const response = await sdrApi.post(`/deviceset/${deviceSetIndex}/spectrum/server`, {
+      run: run ? 1 : 0,
+      serverAddress: '127.0.0.1',
+      serverPort: port,
+      address: '127.0.0.1',
+      port: port,
+      spectrumServerSettings: {
+        run: run ? 1 : 0,
+        serverAddress: '127.0.0.1',
+        serverPort: port
+      }
+    }).catch(() => ({ data: null }));
+    return response.data;
+  },
+
+  // ---- AUDIO OUTPUT & RECORDING ----
+  getAudio: async () => {
+    const response = await sdrApi.get('/audio');
+    return response.data;
+  },
+
+  patchAudioOutput: async (parameters: any) => {
+    // Expected structure: {"copyToUDP": 0, "index": 0, "name": "...", "recordToFile": 1, ...}
+    const response = await sdrApi.patch('/audio/output/parameters', parameters);
+    return response.data;
+  },
+
+  // ---- CHANNEL REPORT ----
+  // Returns live report data: for DATVMod this includes tsFileBitrate, tsFileLength, channelPowerDB etc.
+  getChannelReport: async (deviceSetIndex: number, channelIndex: number) => {
+    const response = await sdrApi.get(`/deviceset/${deviceSetIndex}/channel/${channelIndex}/report`);
+    return response.data;
+  },
   } catch {
     return null;
   }

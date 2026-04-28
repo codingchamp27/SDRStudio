@@ -1,0 +1,34 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#1e293b', 'primaryTextColor': '#ffffff', 'lineColor': '#3b82f6', 'actorBkg': '#2563eb', 'actorBorder': '#60a5fa', 'actorTextColor': '#ffffff', 'signalColor': '#a78bfa', 'signalTextColor': '#f8fafc'}}}%%
+sequenceDiagram
+    autonumber
+    participant User as 👤 User
+    participant Frontend as 🖥️ SDRStudio-Web
+    participant API as ⚙️ Backend API
+    participant Baseband as 📻 DATVModBaseband
+    participant ModSource as 📡 DATVModSource
+    participant Hardware as 🎛️ PlutoSDR
+
+    User->>Frontend: Clicks "Upload Media"
+    Frontend->>API: POST /api/upload (.ts File)
+    API-->>Frontend: Returns File Path
+    
+    User->>Frontend: Clicks "▶ Play"
+    Frontend->>API: PATCH Channel (tsFilePlay=1)
+    
+    API->>Baseband: Push MsgConfigureTsFileName
+    Baseband->>ModSource: openTsFile()
+    ModSource->>ModSource: Calculate Data Bitrate
+    
+    API->>Baseband: Push MsgConfigureDATVMod
+    Baseband->>ModSource: applySettings()
+    
+    rect rgb(15, 23, 42)
+        loop Every DSP Cycle (Real-Time)
+            ModSource->>ModSource: Read MPEG-TS Packet
+            ModSource->>ModSource: Forward Error Correction (FEC)
+            ModSource->>ModSource: QPSK/8PSK Constellation Mapping
+            ModSource->>ModSource: Root Raised Cosine Filter
+            ModSource->>Hardware: Push I/Q Samples
+            Hardware->>Hardware: Upconvert & Transmit RF Signal
+        end
+    end

@@ -1,0 +1,64 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#1e293b', 'primaryTextColor': '#ffffff', 'primaryBorderColor': '#3b82f6', 'lineColor': '#94a3b8', 'clusterBkg': 'transparent', 'clusterBorder': 'transparent'}, 'flowchart': {'curve': 'basis'}}}%%
+graph LR
+    subgraph Frontend [ SDRStudio-Web ]
+        direction TB
+        UI([🖥️ Web Interface])
+        API_Client([🔌 REST API Client])
+        WS_Client([⚡ WebSocket Client])
+        Media_Uploader([📁 Media Uploader])
+    end
+
+    subgraph Communication [ Communication Layer ]
+        direction TB
+        REST_HTTP{{🌐 HTTP GET/PATCH}}
+        WS_WSS{{🔄 WebSocket Stream}}
+        Media_HTTP{{📦 HTTP Multipart}}
+    end
+
+    subgraph Backend [ SDRangel Headless Backend ]
+        direction TB
+        API_Server[[⚙️ REST API Server]]
+        Spectrum_Server[[📊 Spectrum Server]]
+        Core[(🧠 Core DSP Engine)]
+        Modems[[📻 Modems / Codecs]]
+        Hardware_HAL[[🔌 Hardware HAL]]
+    end
+
+    subgraph Hardware [ SDR Hardware ]
+        direction TB
+        Pluto[/📡 PlutoSDR/]
+        USRP[/📡 USRP/]
+        HackRF[/📡 HackRF/]
+    end
+
+    UI <--> |User Actions| API_Client
+    UI <--> |Live Data| WS_Client
+    UI --> |Uploads| Media_Uploader
+
+    API_Client <--> |Control JSON| REST_HTTP
+    WS_Client <--> |Binary FFT Data| WS_WSS
+    Media_Uploader --> |.ts/.mp4| Media_HTTP
+
+    REST_HTTP <--> API_Server
+    WS_WSS <--> Spectrum_Server
+    Media_HTTP --> API_Server
+
+    API_Server <--> Core
+    API_Server <--> Modems
+    Spectrum_Server <--> Core
+    
+    Core <--> Modems
+    Core <--> Hardware_HAL
+    Hardware_HAL <--> Pluto
+    Hardware_HAL <--> USRP
+    Hardware_HAL <--> HackRF
+
+    classDef frontend fill:#2563eb,stroke:#60a5fa,stroke-width:2px,color:#fff;
+    classDef backend fill:#059669,stroke:#34d399,stroke-width:2px,color:#fff;
+    classDef comms fill:#7c3aed,stroke:#a78bfa,stroke-width:2px,color:#fff;
+    classDef hw fill:#ea580c,stroke:#fb923c,stroke-width:2px,color:#fff;
+
+    class UI,API_Client,WS_Client,Media_Uploader frontend;
+    class Core,API_Server,Spectrum_Server,Modems,Hardware_HAL backend;
+    class REST_HTTP,WS_WSS,Media_HTTP comms;
+    class Pluto,USRP,HackRF hw;
