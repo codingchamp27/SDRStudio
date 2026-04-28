@@ -31,6 +31,48 @@ export default defineConfig({
           });
         });
 
+        server.middlewares.use('/api/stat', async (req, res) => {
+          const fs = await import('fs');
+          const url = new URL(req.url || '/', `http://${req.headers.host}`);
+          const file = url.searchParams.get('path');
+          if (!file) {
+            res.setHeader('Content-Type', 'application/json');
+            return res.end(JSON.stringify({ exists: false }));
+          }
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ exists: fs.existsSync(file) }));
+        });
+
+        server.middlewares.use('/api/transcode', async (req, res) => {
+          if (req.method !== 'POST') return res.end();
+          let body = '';
+          req.on('data', chunk => body += chunk);
+          req.on('end', async () => {
+            try {
+              const { filePath } = JSON.parse(body);
+              if (!filePath) { res.statusCode = 400; return res.end(); }
+              const fs = await import('fs');
+              const { exec } = await import('child_process');
+              
+              const optimizedPath = filePath.replace(/\.[^/.]+$/, "") + '_web.mp4';
+              
+              if (fs.existsSync(optimizedPath)) {
+                res.setHeader('Content-Type', 'application/json');
+                return res.end(JSON.stringify({ ok: true, optimizedPath }));
+              }
+              
+              exec(`ffmpeg -y -i "${filePath}" -c:v libx264 -preset fast -crf 28 -c:a aac -b:a 128k -movflags +faststart "${optimizedPath}"`, (err) => {
+                res.setHeader('Content-Type', 'application/json');
+                if (err) {
+                  res.end(JSON.stringify({ ok: false, error: err.message }));
+                } else {
+                  res.end(JSON.stringify({ ok: true, optimizedPath }));
+                }
+              });
+            } catch (e) { res.statusCode = 400; res.end('Bad request'); }
+          });
+        });
+
         server.middlewares.use('/api/stream', async (req, res) => {
           const fs = await import('fs');
           const url = new URL(req.url || '/', `http://${req.headers.host}`);
@@ -43,6 +85,8 @@ export default defineConfig({
           const fileSize = stat.size;
           const range = req.headers.range;
 
+          const contentType = file.toLowerCase().endsWith('.mp4') ? 'video/mp4' : 'video/mp2t';
+
           if (range) {
             const parts = range.replace(/bytes=/, "").split("-");
             const start = parseInt(parts[0], 10);
@@ -53,14 +97,14 @@ export default defineConfig({
               'Content-Range': `bytes ${start}-${end}/${fileSize}`,
               'Accept-Ranges': 'bytes',
               'Content-Length': chunksize,
-              'Content-Type': 'video/mp2t',
+              'Content-Type': contentType,
               'Access-Control-Allow-Origin': '*'
             });
             fileStream.pipe(res);
           } else {
             res.writeHead(200, {
               'Content-Length': fileSize,
-              'Content-Type': 'video/mp2t',
+              'Content-Type': contentType,
               'Access-Control-Allow-Origin': '*'
             });
             fs.createReadStream(file).pipe(res);

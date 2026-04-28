@@ -29,7 +29,7 @@ function TsPlayer({ filePath }: { filePath: string }) {
 
     player.on(mpegts.Events.ERROR, (type, detail, info) => {
       console.error('mpegts error:', type, detail, info);
-      if (detail === mpegts.ErrorDetails.FORMAT_ERROR) {
+      if (detail === mpegts.ErrorDetails.MEDIA_FORMAT_ERROR || detail === mpegts.ErrorDetails.MEDIA_FORMAT_UNSUPPORTED) {
         toast('Video format or codec not supported by browser. Try H.264/AVC.', 'error');
       }
     });
@@ -696,13 +696,13 @@ function ChannelWorkspaceCard({ dsIdx, cIdx, channel }: { dsIdx: number, cIdx: n
   const srcField       = isDatv ? 'tsSource'      : 'atvModInput'; // 1 = File (DATV), 2 = Video (ATV)
   const srcVal         = isDatv ? 1 : 2;
 
-  // ── Sync file path from backend on mount so play button works after page reload ─
-  // NOTE: We intentionally do NOT sync isPlaying/isLooping here. Syncing those
-  // caused a critical bug: if the backend was already playing, the frontend
-  // would show ⏸ instead of ▶, so clicking ▶ would send tsFilePlay=0 (pause).
+  // ── Sync file path, play, and loop state from backend on mount ─
   useEffect(() => {
     if (!supportsUpload) return;
     const syncFilePath = async () => {
+      // Small delay to let SDRangel finish initializing the channel.
+      // Hitting getChannelSettings() on a partially-initialized channel segfaults.
+      await new Promise(r => setTimeout(r, 1500));
       try {
         const s = await SdrService.getChannelSettings(dsIdx, cIdx);
         const key = Object.keys(s).find(k => k.endsWith('Settings'));
@@ -712,10 +712,16 @@ function ChannelWorkspaceCard({ dsIdx, cIdx, channel }: { dsIdx: number, cIdx: n
           setTsFilePath(filePath);
           setUploadStatus({ name: filePath.split('/').pop() || filePath, path: filePath, status: 'done' });
         }
+        if (s[key][playField] !== undefined) {
+          setIsPlaying(s[key][playField] === 1);
+        }
+        if (s[key][loopField] !== undefined) {
+          setIsLooping(s[key][loopField] === 1);
+        }
       } catch { /* backend may not be ready */ }
     };
     syncFilePath();
-  }, [dsIdx, cIdx, supportsUpload]);
+  }, [dsIdx, cIdx, supportsUpload, fileNameField, playField, loopField]);
 
   const handleUploadClick = () => fileInputRef.current?.click();
 
@@ -812,10 +818,14 @@ function ChannelWorkspaceCard({ dsIdx, cIdx, channel }: { dsIdx: number, cIdx: n
       const current = await SdrService.getChannelSettings(dsIdx, cIdx);
       const settingsKey = Object.keys(current).find(k => k.endsWith('Settings'));
       if (!settingsKey) throw new Error('No settings key found');
+      // IMPORTANT: Send only the changed field in a minimal-key payload.
+      // SDRangel uses key presence to decide what to apply. Spreading ALL settings
+      // causes it to re-trigger tsFileName (reopening/resetting the file stream)
+      // and tsFilePlay (toggling playback) on every unrelated settings change.
       const merged = {
         channelType: current.channelType,
         direction: current.direction,
-        [settingsKey]: { ...current[settingsKey], [field]: value },
+        [settingsKey]: { [field]: value },
       };
       await SdrService.patchChannelSettings(dsIdx, cIdx, merged);
     } catch (e: any) {
@@ -842,10 +852,12 @@ function ChannelWorkspaceCard({ dsIdx, cIdx, channel }: { dsIdx: number, cIdx: n
     try {
       setFullSettings((prev: any) => ({ ...prev, [field]: value }));
       const current = await SdrService.getChannelSettings(dsIdx, cIdx);
+      // Minimal-key payload: only send the changed field to avoid
+      // accidentally re-triggering file open or play state changes.
       const merged = {
         channelType: current.channelType,
         direction: current.direction,
-        [settingsKey]: { ...current[settingsKey], [field]: value },
+        [settingsKey]: { [field]: value },
       };
       await SdrService.patchChannelSettings(dsIdx, cIdx, merged);
     } catch (e: any) { toast(`Failed to update ${field}: ${e?.message ?? 'API error'}`, 'error'); }
@@ -1105,7 +1117,38 @@ function ChannelWorkspaceCard({ dsIdx, cIdx, channel }: { dsIdx: number, cIdx: n
 
 
 
-function MechanicalDisplay({ value, digits, color = 'orange', suffix = '' }: { value: number, digits: number, color?: 'orange'|'green', suffix?: string }) {
+function MechanicalDisplay({ value, digits, color = 'orange', suffix = '', onUpdate }: { value: number, digits: number, color?: 'orange'|'green', suffix?: string, onUpdate?: (val: number) => void }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editVal, setEditVal] = useState(value.toString());
+
+  if (isEditing) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+        <input 
+          autoFocus
+          className="freq-number"
+          style={{ width: `${digits * 12}px`, fontSize: '18px', padding: '2px', background: '#111', color: '#fff', border: '1px solid #444', outline: 'none', textAlign: 'right' }}
+          value={editVal}
+          onChange={e => setEditVal(e.target.value)}
+          onBlur={() => {
+            setIsEditing(false);
+            if (onUpdate && !isNaN(Number(editVal))) onUpdate(Number(editVal));
+          }}
+          onKeyDown={e => {
+            if (e.key === 'Enter') {
+              setIsEditing(false);
+              if (onUpdate && !isNaN(Number(editVal))) onUpdate(Number(editVal));
+            } else if (e.key === 'Escape') {
+              setIsEditing(false);
+              setEditVal(value.toString());
+            }
+          }}
+        />
+        {suffix && <span style={{ fontSize: '14px', color: '#ccc' }}>{suffix}</span>}
+      </div>
+    );
+  }
+
   const str = value.toString().padStart(digits, '0');
   const blocks = [];
   for (let i = 0; i < str.length; i++) {
@@ -1115,7 +1158,16 @@ function MechanicalDisplay({ value, digits, color = 'orange', suffix = '' }: { v
     }
   }
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+    <div 
+      style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: onUpdate ? 'pointer' : 'default' }}
+      onClick={() => {
+        if (onUpdate) {
+          setEditVal(value.toString());
+          setIsEditing(true);
+        }
+      }}
+      title={onUpdate ? "Click to edit" : undefined}
+    >
       <div className="digit-display">{blocks}</div>
       {suffix && <span style={{ fontSize: '14px', color: '#ccc' }}>{suffix}</span>}
     </div>
@@ -1124,6 +1176,7 @@ function MechanicalDisplay({ value, digits, color = 'orange', suffix = '' }: { v
 
 function DeviceSidebarCard({ idx, ds, onAddChannel }: { idx: number, ds: DeviceSet, onAddChannel: () => void }) {
   const [hwSettings, setHwSettings] = useState<any>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
   const { toast } = useToast();
 
   const hw = ds.samplingDevice;
@@ -1169,6 +1222,9 @@ function DeviceSidebarCard({ idx, ds, onAddChannel }: { idx: number, ds: DeviceS
     setOptimisticState(targetState ? 'running' : 'idle');
     try {
       await SdrService.setDeviceState(idx, targetState);
+      // Give SDRangel 2s to fully initialize or tear down the DSP engine.
+      // Polling the API during this transition window causes segfaults.
+      await new Promise(r => setTimeout(r, 2000));
     } catch (e) {
       setOptimisticState(null);
       toast("Failed to toggle DSP engine state", "error");
@@ -1191,7 +1247,7 @@ function DeviceSidebarCard({ idx, ds, onAddChannel }: { idx: number, ds: DeviceS
       <div className="native-header" style={{ justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
           <div style={{ background: '#d32f2f', color: '#fff', padding: '0 4px', fontSize: '12px', fontWeight: 'bold' }}>T:{idx}</div>
-          <button className="run-btn" title="Settings" style={{ fontSize: '14px' }}>⚙</button>
+          <button className="run-btn" title="Settings" onClick={() => setIsExpanded(!isExpanded)} style={{ fontSize: '14px', background: isExpanded ? 'rgba(255,255,255,0.2)' : 'transparent' }}>⚙</button>
           <button className="run-btn" title="Toggle Run" onClick={handlePowerDrop} style={{ background: isRunning ? '#5a7dcf' : '#6e6e6e' }}>
             {isRunning ? '▶' : '▶'}
           </button>
@@ -1206,7 +1262,11 @@ function DeviceSidebarCard({ idx, ds, onAddChannel }: { idx: number, ds: DeviceS
 
       {/* FREQUENCY ROW */}
       <div className="native-row" style={{ padding: '8px', justifyContent: 'center' }}>
-        <MechanicalDisplay value={Math.floor((hw?.centerFrequency || 435000000) / 1000)} digits={7} color="orange" suffix="kHz" />
+        <MechanicalDisplay 
+          value={Math.floor((hwSettings?.centerFrequency || hw?.centerFrequency || 435000000) / 1000)} 
+          digits={7} color="orange" suffix="kHz" 
+          onUpdate={val => patchSetting('centerFrequency', val * 1000)}
+        />
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginLeft: 'auto' }}>
           <span className="native-label">#0</span>
           <span className="native-label">3000k</span>
@@ -1232,7 +1292,11 @@ function DeviceSidebarCard({ idx, ds, onAddChannel }: { idx: number, ds: DeviceS
       <div className="native-row">
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span className="native-label" style={{ fontWeight: 'bold' }}>SR</span>
-          <MechanicalDisplay value={hwSettings?.devSampleRate || hw?.devSampleRate || 3000000} digits={8} color="green" suffix="S/s" />
+          <MechanicalDisplay 
+            value={hwSettings?.devSampleRate || hw?.devSampleRate || 3000000} 
+            digits={8} color="green" suffix="S/s" 
+            onUpdate={val => patchSetting('devSampleRate', val)}
+          />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
           <span className="native-label">Int</span>
@@ -1253,15 +1317,28 @@ function DeviceSidebarCard({ idx, ds, onAddChannel }: { idx: number, ds: DeviceS
       <div className="native-row" style={{ justifyContent: 'center', gap: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
           <span className="native-label">LPF</span>
-          <MechanicalDisplay value={10000} digits={5} color="orange" suffix="kHz" />
+          <MechanicalDisplay 
+            value={hwSettings?.lpfBW !== undefined ? Math.floor(hwSettings.lpfBW / 1000) : 10000} 
+            digits={5} color="orange" suffix="kHz" 
+            onUpdate={hwSettings?.lpfBW !== undefined ? (val => patchSetting('lpfBW', val * 1000)) : undefined}
+          />
         </div>
         <div style={{ width: '1px', height: '24px', background: '#222', borderRight: '1px solid #444' }}></div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
           <span className="native-label">LO</span>
           <span style={{ color: '#f39c12', fontSize: '16px', fontWeight: 'bold' }}>+</span>
-          <MechanicalDisplay value={0} digits={6} color="orange" suffix="kHz" />
+          <MechanicalDisplay 
+            value={hwSettings?.LOOffset !== undefined ? Math.floor(hwSettings.LOOffset / 1000) : 0} 
+            digits={6} color="orange" suffix="kHz" 
+            onUpdate={hwSettings?.LOOffset !== undefined ? (val => patchSetting('LOOffset', val * 1000)) : undefined}
+          />
         </div>
       </div>
+
+      {/* DYNAMIC SETTINGS */}
+      {isExpanded && hwSettings && (
+        <DynamicSettingsEditor settings={hwSettings} onChange={patchSetting} />
+      )}
     </div>
   );
 }
@@ -1270,6 +1347,34 @@ function MediaPlayerPanel({ deviceSets }: { deviceSets: DeviceSet[] }) {
   // Find the DATV channel's file path from any TX device set
   const [filePath, setFilePath] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const [optimizedPath, setOptimizedPath] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!filePath) {
+      setOptimizedPath(null);
+      return;
+    }
+    if (filePath.toLowerCase().endsWith('_web.mp4')) {
+      setOptimizedPath(filePath);
+      return;
+    }
+    const checkOptimized = async () => {
+      try {
+        const potentialPath = filePath.replace(/\.[^/.]+$/, "") + '_web.mp4';
+        const res = await fetch(`/api/stat?path=${encodeURIComponent(potentialPath)}`);
+        const data = await res.json();
+        if (data.exists) {
+          setOptimizedPath(potentialPath);
+        } else {
+          setOptimizedPath(null);
+        }
+      } catch (e) {
+        setOptimizedPath(null);
+      }
+    };
+    checkOptimized();
+  }, [filePath]);
 
   useEffect(() => {
     const txSets = deviceSets.filter(ds => ds.samplingDevice?.direction === 1);
@@ -1312,6 +1417,28 @@ function MediaPlayerPanel({ deviceSets }: { deviceSets: DeviceSet[] }) {
     }
   };
 
+  const handleOptimize = async () => {
+    if (!filePath) return;
+    setIsOptimizing(true);
+    try {
+      const res = await fetch('/api/transcode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filePath })
+      });
+      const data = await res.json();
+      if (data.ok && data.optimizedPath) {
+        setOptimizedPath(data.optimizedPath);
+      } else {
+        alert("Optimization failed: " + (data.error || 'Unknown error'));
+      }
+    } catch (e) {
+      alert("Failed to request optimization.");
+    } finally {
+      setIsOptimizing(false);
+    }
+  };
+
   return (
     <div style={{
       flex: 1, height: '100%',
@@ -1341,13 +1468,22 @@ function MediaPlayerPanel({ deviceSets }: { deviceSets: DeviceSet[] }) {
           borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center',
           position: 'relative', overflow: 'hidden',
         }}>
-          {filePath ? <TsPlayer filePath={filePath} /> : (
+          {optimizedPath ? (
+            <video 
+              controls 
+              autoPlay
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              src={`/api/stream?path=${encodeURIComponent(optimizedPath)}`} 
+            />
+          ) : filePath ? (
+            <TsPlayer filePath={filePath} />
+          ) : (
             <div style={{ color: '#444', fontSize: '14px', textAlign: 'center' }}>
               <div style={{ fontSize: '32px', marginBottom: '8px' }}>▶</div>
               <div>No Video Loaded</div>
             </div>
           )}
-          <div style={{ position: 'absolute', bottom: '6px', left: '8px', fontSize: '9px', color: '#555', fontFamily: 'JetBrains Mono,monospace', zIndex: 10, textShadow: '0 0 4px #000' }}>
+          <div style={{ position: 'absolute', top: '8px', left: '8px', fontSize: '9px', color: '#555', fontFamily: 'JetBrains Mono,monospace', zIndex: 10, textShadow: '0 0 4px #000', pointerEvents: 'none' }}>
             {isPlaying ? 'LIVE TX' : 'STANDBY'}
           </div>
         </div>
@@ -1373,14 +1509,29 @@ function MediaPlayerPanel({ deviceSets }: { deviceSets: DeviceSet[] }) {
           </div>
           
           {filePath && (
-            <button onClick={openSystemVideo} style={{
-              background: 'rgba(255, 140, 0, 0.1)', border: '1px solid rgba(255, 140, 0, 0.3)',
-              color: '#ff8c00', padding: '8px 12px', borderRadius: '4px', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', fontWeight: '600',
-              transition: 'all 0.2s'
-            }}>
-              <span style={{ fontSize: '14px' }}>📺</span> Open in System Player (Fallback)
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {!optimizedPath && (
+                <button onClick={handleOptimize} disabled={isOptimizing} style={{
+                  background: isOptimizing ? 'rgba(52, 152, 219, 0.1)' : 'rgba(46, 213, 115, 0.1)', 
+                  border: `1px solid ${isOptimizing ? 'rgba(52, 152, 219, 0.3)' : 'rgba(46, 213, 115, 0.3)'}`,
+                  color: isOptimizing ? '#3498db' : '#2ed573', 
+                  padding: '8px 12px', borderRadius: '4px', cursor: isOptimizing ? 'wait' : 'pointer',
+                  display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', fontWeight: '600',
+                  transition: 'all 0.2s'
+                }}>
+                  <span style={{ fontSize: '14px' }}>{isOptimizing ? '⏳' : '⚡'}</span> 
+                  {isOptimizing ? 'Optimizing (this may take a minute)...' : 'Optimize for Web (H.264)'}
+                </button>
+              )}
+              <button onClick={openSystemVideo} style={{
+                background: 'rgba(255, 140, 0, 0.1)', border: '1px solid rgba(255, 140, 0, 0.3)',
+                color: '#ff8c00', padding: '8px 12px', borderRadius: '4px', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', fontWeight: '600',
+                transition: 'all 0.2s'
+              }}>
+                <span style={{ fontSize: '14px' }}>📺</span> Open in System Player (Fallback)
+              </button>
+            </div>
           )}
 
           {/* Status badges */}
@@ -1447,6 +1598,13 @@ function SdrApplication() {
 
   const { toast } = useToast();
 
+  // ── TX-only filter: dashboard is solely devoted to transmitters ──
+  // Keep the original deviceSets for correct API index resolution,
+  // but only render TX device sets (direction === 1).
+  const txDeviceSets = deviceSets
+    .map((ds, idx) => ({ ds, idx }))
+    .filter(({ ds }) => ds.samplingDevice?.direction === 1);
+
   useEffect(() => {
     const fetchSdrStatus = async () => {
       try {
@@ -1476,6 +1634,10 @@ function SdrApplication() {
     const direction = deviceSets[registryTarget]?.samplingDevice?.direction || 0;
     try {
       await SdrService.addChannel(registryTarget, pluginId, direction);
+      // Give SDRangel 2s to fully initialize the new channel's baseband, pulse-shape
+      // filters, etc. before the polling loops fire getChannelSettings(). Hitting the
+      // API during this window crashes the C++ backend with a segfault.
+      await new Promise(r => setTimeout(r, 2000));
       toast(`Successfully added ${pluginId} channel plugin`, "success" as any);
     } catch (e) {
       toast(`Failed to add plugin`, "error");
@@ -1583,7 +1745,7 @@ function SdrApplication() {
                 </div>
               </div>
               <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
-                {deviceSets.length === 0 ? (
+                {txDeviceSets.length === 0 ? (
                   <div style={{ padding: '60px 20px', textAlign: 'center', color: '#444' }}>
                     <div style={{ fontSize: '42px', marginBottom: '16px' }}>📡</div>
                     <div style={{ fontSize: '14px', color: '#555', lineHeight: 1.6, marginBottom: '20px' }}>No TX device active.<br />Click the button below to add one.</div>
@@ -1594,7 +1756,7 @@ function SdrApplication() {
                   </div>
                 ) : (
                   <div style={{ maxWidth: '500px', margin: '0 auto' }}>
-                    {deviceSets.map((ds, idx) => (
+                    {txDeviceSets.map(({ ds, idx }) => (
                       <DeviceSidebarCard key={idx} idx={idx} ds={ds} onAddChannel={() => setRegistryTarget(idx)} />
                     ))}
                   </div>
@@ -1616,19 +1778,19 @@ function SdrApplication() {
                 </div>
               </div>
               <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
-                {deviceSets.length === 0 ? (
+                {txDeviceSets.length === 0 ? (
                   <div style={{ padding: '60px 20px', textAlign: 'center', color: '#444' }}>
                     <div style={{ fontSize: '42px', marginBottom: '16px' }}>🔌</div>
                     <div style={{ fontSize: '14px', color: '#555' }}>Add a TX device first, then attach a DATV Modulator channel.</div>
                   </div>
                 ) : (
                   <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                    {deviceSets.map((ds, idx) => {
-                      const channels = ds.channels || [];
+                    {txDeviceSets.map(({ ds, idx }) => {
+                      const channels = (ds.channels || []).filter((ch: any) => ch.direction === 1);
                       if (channels.length === 0) return (
                         <div key={idx} style={{ padding: '32px 20px', textAlign: 'center', color: '#444', width: '100%', maxWidth: '400px' }}>
                           <div style={{ fontSize: '13px', color: '#555', lineHeight: 1.8 }}>
-                            No channel plugins on device {idx}.<br />
+                            No TX channel plugins on device {idx}.<br />
                             <button onClick={() => setRegistryTarget(idx)} style={{
                               marginTop: '12px', background: 'rgba(255,140,0,0.15)', border: '1px solid rgba(255,140,0,0.4)',
                               color: '#ff8c00', borderRadius: '6px', padding: '6px 18px', cursor: 'pointer', fontSize: '12px', fontWeight: 600,
